@@ -9,7 +9,7 @@ grafana:
 
   replicas: 1
   deploymentStrategy:
-    type: Recreate
+    type: RollingUpdate
 
   service:
     type: ClusterIP
@@ -39,7 +39,7 @@ grafana:
     enabled: true
     type: pvc
     storageClassName: longhorn
-    size: 5Gi
+    size: 10Gi
     accessModes:
       - ReadWriteOnce
 

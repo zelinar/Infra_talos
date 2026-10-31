@@ -174,7 +174,7 @@ victoria-common:
       - name: collect-active
         spec:
           name: "collect-active"
-          bearerTokenSecret:
+          tokenRef:
             name: victoria-internal-auth-tokens
             key: collect_active_token
           targetRefs:
@@ -193,7 +193,7 @@ victoria-common:
       - name: ingest-active
         spec:
           name: "ingest-active"
-          bearerTokenSecret:
+          tokenRef:
             name: victoria-internal-auth-tokens
             key: ingest_active_token
           targetRefs:
@@ -340,7 +340,7 @@ victoria-common:
           key: token
       remoteRead:
         url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
-        lookBack: "1h"
+        lookback: "1h"
       selectAllByDefault: true
       ruleNamespaceSelector: {}
       securityContext:

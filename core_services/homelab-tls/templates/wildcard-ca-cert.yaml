@@ -2,15 +2,6 @@
 {{- $issuer := .Values.issuerName | default "homelab-ca-issuer" -}}
 {{- range $ns := (.Values.targetNamespaces | default (list "traefik" "monitoring")) }}
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ $ns }}
-  labels:
-    pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/audit: privileged
-    pod-security.kubernetes.io/warn: privileged
----
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

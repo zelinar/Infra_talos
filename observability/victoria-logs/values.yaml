@@ -15,11 +15,10 @@ victoria-logs:
     annotations: {}
 
     spec:
-      retentionPeriod: "30d"
-      retentionMaxDiskSpaceUsageBytes: "12GB"
-
       vlstorage:
         replicaCount: 2
+        retentionPeriod: "30d"
+        retentionMaxDiskSpaceUsageBytes: "12GB"
         storageDataPath: "/vl-data"
         storage:
           volumeClaimTemplate:
