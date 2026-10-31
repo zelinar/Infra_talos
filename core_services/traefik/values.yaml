@@ -1,0 +1,32 @@
+traefik:
+  deployment:
+    replicas: 2
+
+  providers:
+    kubernetesCRD:
+      enabled: true
+      allowCrossNamespace: true
+    kubernetesIngress:
+      enabled: true
+      publishedService:
+        enabled: true
+
+  ports:
+    web:
+      http:
+        redirections:
+          entryPoint:
+            to: websecure
+            scheme: https
+            permanent: true
+
+  service:
+    enabled: true
+    type: LoadBalancer
+    spec:
+      loadBalancerIP: "10.10.20.125"
+
+  tlsStore:
+    default:
+      defaultCertificate:
+        secretName: wildcard-homelab-secret

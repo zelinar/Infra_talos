@@ -1,0 +1,60 @@
+- apiVersion: argoproj.io/v1alpha1
+  kind: ApplicationSet
+  metadata:
+    name: observability
+    namespace: ${argocd_namespace}
+  spec:
+    goTemplate: true
+    goTemplateOptions: ["missingkey=default"]
+    generators:
+      - git:
+          repoURL: ${gitops_repo_url}
+          revision: ${gitops_repo_revision}
+          directories:
+            - path: ${observability_path}/*
+    template:
+      metadata:
+        name: '{{ .path.basename }}'
+        annotations:
+          # Ordered Sync Waves for the VictoriaMetrics + VictoriaLogs + Alloy + Grafana stack:
+          # Wave 4: Operators & CRDs (victoria-metrics-operator, kube-state-metrics)
+          # Wave 5: Core Storage Clusters (victoria-metrics VMCluster, victoria-logs VLCluster)
+          # Wave 6: Auth Gateway, Agents, Scrapers, Alerting & UI (victoria-common, grafana-alloy, alloy-daemonset, grafana)
+          argocd.argoproj.io/sync-wave: >-
+            {{- $name := .path.basename -}}
+            {{- if or (eq $name "victoria-metrics-operator") (eq $name "kube-state-metrics") -}}
+              4
+            {{- else if or (eq $name "victoria-metrics") (eq $name "victoria-logs") -}}
+              5
+            {{- else -}}
+              6
+            {{- end -}}
+      spec:
+        project: observability
+        source:
+          repoURL: ${gitops_repo_url}
+          targetRevision: ${gitops_repo_revision}
+          path: '{{ .path.path }}'
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: monitoring
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          managedNamespaceMetadata:
+            labels:
+              pod-security.kubernetes.io/enforce: privileged
+              pod-security.kubernetes.io/audit: privileged
+              pod-security.kubernetes.io/warn: privileged
+          retry:
+            limit: 5
+            backoff:
+              duration: 10s
+              factor: 2
+              maxDuration: 3m
+          syncOptions:
+            - CreateNamespace=true
+            - PrunePropagationPolicy=foreground
+            - ServerSideApply=true
+            - RespectIgnoreDifferences=true

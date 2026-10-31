@@ -1,0 +1,80 @@
+- apiVersion: argoproj.io/v1alpha1
+  kind: ApplicationSet
+  metadata:
+    name: core-services
+    namespace: ${argocd_namespace}
+  spec:
+    goTemplate: true
+    goTemplateOptions: ["missingkey=default"]
+    generators:
+      - git:
+          repoURL: ${gitops_repo_url}
+          revision: ${gitops_repo_revision}
+          directories:
+            - path: ${core_services_path}/*
+    template:
+      metadata:
+        name: '{{ .path.basename }}'
+        annotations:
+          # Ordered Sync Waves prevent CRD and webhook race conditions:
+          # Wave 1: Foundational CRDs & Controllers (cert-manager, metallb, metrics-server)
+          # Wave 2: Issuers, IP Pools, Storage, DB Operators (homelab-tls, metallb-custom-ip-pool, longhorn, cnpg-operator, trust-manager, external-secrets)
+          # Wave 3: Ingress & DNS (traefik, external-dns)
+          argocd.argoproj.io/sync-wave: >-
+            {{- $name := .path.basename -}}
+            {{- if or (eq $name "cert-manager") (eq $name "metallb") (eq $name "metrics-server") -}}
+              1
+            {{- else if or (eq $name "homelab-tls") (eq $name "trust-manager") (eq $name "metallb-custom-ip-pool") (eq $name "longhorn") (eq $name "cnpg-operator") (eq $name "external-secrets") -}}
+              2
+            {{- else if or (eq $name "traefik") (eq $name "external-dns") -}}
+              3
+            {{- else -}}
+              4
+            {{- end -}}
+      spec:
+        project: core-services
+        source:
+          repoURL: ${gitops_repo_url}
+          targetRevision: ${gitops_repo_revision}
+          path: '{{ .path.path }}'
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: >-
+            {{- $name := .path.basename -}}
+            {{- if eq $name "longhorn" -}}
+              longhorn-system
+            {{- else if or (eq $name "metallb") (eq $name "metallb-custom-ip-pool") -}}
+              metallb-system
+            {{- else if eq $name "traefik" -}}
+              traefik
+            {{- else if or (eq $name "cert-manager") (eq $name "homelab-tls") (eq $name "trust-manager") -}}
+              cert-manager
+            {{- else if eq $name "cnpg-operator" -}}
+              cnpg-system
+            {{- else if eq $name "metrics-server" -}}
+              kube-system
+            {{- else if eq $name "external-secrets" -}}
+              external-secrets
+            {{- else -}}
+              {{ $name }}
+            {{- end -}}
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          managedNamespaceMetadata:
+            labels:
+              pod-security.kubernetes.io/enforce: privileged
+              pod-security.kubernetes.io/audit: privileged
+              pod-security.kubernetes.io/warn: privileged
+          retry:
+            limit: 5
+            backoff:
+              duration: 10s
+              factor: 2
+              maxDuration: 3m
+          syncOptions:
+            - CreateNamespace=true
+            - PrunePropagationPolicy=foreground
+            - ServerSideApply=true
+            - RespectIgnoreDifferences=true

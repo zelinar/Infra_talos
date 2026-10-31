@@ -1,0 +1,59 @@
+{{- /*
+templates/ingress.yaml
+
+Renders one or more Ingress resources from:
+.Values["victoria-logs"].ingress.ingresses[]
+*/ -}}
+{{- $cfg := index .Values "victoria-logs" -}}
+{{- if and $cfg $cfg.ingress $cfg.ingress.enabled -}}
+{{- $domain := required "victoria-logs.ingress.ingressDomain is required" $cfg.ingress.ingressDomain -}}
+
+{{- range $ing := $cfg.ingress.ingresses -}}
+{{- if $ing.enabled -}}
+{{- $host := $ing.host -}}
+{{- if and $domain (not (contains "." $ing.host)) -}}
+{{- $host = printf "%s.%s" $ing.host $domain -}}
+{{- end -}}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ printf "%s%s" $cfg.ingress.namePrefix $ing.name | trunc 63 | trimSuffix "-" }}
+{{ if $cfg.ingress.setNamespace }}
+  namespace: {{ $.Release.Namespace }}
+{{ end }}
+  labels:
+    app.kubernetes.io/name: {{ $.Chart.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    helm.sh/chart: {{ printf "%s-%s" $.Chart.Name $.Chart.Version | quote }}
+{{ with $cfg.ingress.annotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+spec:
+{{ if $cfg.ingress.className }}
+  ingressClassName: {{ $cfg.ingress.className }}
+{{ end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+{{ range $p := $ing.paths }}
+          - path: {{ $p.path | quote }}
+            pathType: {{ $p.pathType }}
+            backend:
+              service:
+                name: {{ $ing.service.name }}
+                port:
+{{ if or (kindIs "int" $ing.service.port) (kindIs "int64" $ing.service.port) }}
+                  number: {{ $ing.service.port }}
+{{ else }}
+                  name: {{ $ing.service.port | quote }}
+{{ end }}
+{{ end }}
+
+{{- end -}}
+{{- end -}}
+{{- end -}}

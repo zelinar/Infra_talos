@@ -1,0 +1,305 @@
+# ==============================================================================
+# Proxmox Connection Variables
+# ==============================================================================
+variable "pm_api_url" {
+  description = "Proxmox VE API endpoint URL (e.g. https://10.10.20.20:8006)"
+  type        = string
+  default     = "https://10.10.20.20:8006"
+}
+
+variable "pm_api_token_id" {
+  description = "Proxmox API token ID in the format USER@REALM!TOKENID (e.g. terraform@pve!terraform-token)"
+  type        = string
+  default     = "terraform@pve!terraform-token"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9\\-_\\.]+@[a-zA-Z0-9\\-_]+![a-zA-Z0-9\\-_]+(=[0-9a-fA-F-]{36})?$", trimspace(var.pm_api_token_id)))
+    error_message = "pm_api_token_id must be in the format 'USER@REALM!TOKENID' (for example: 'terraform@pve!terraform-token' or 'root@pam!root-token')."
+  }
+}
+
+variable "pm_api_token_secret" {
+  description = "Proxmox API token secret UUID (e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)"
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = strcontains(trimspace(var.pm_api_token_id), "=") || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", trimspace(var.pm_api_token_secret)))
+    error_message = "pm_api_token_secret must be a valid UUID (format: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')."
+  }
+}
+
+variable "pm_tls_insecure" {
+  description = "Skip TLS verification when connecting to Proxmox API"
+  type        = bool
+  default     = true
+}
+
+variable "proxmox_node" {
+  description = "Default Proxmox node name where VMs and ISOs will be placed"
+  type        = string
+  default     = "homelab-server"
+}
+
+variable "proxmox_iso_datastore" {
+  description = "Proxmox datastore ID for storing the Talos ISO image"
+  type        = string
+  default     = "local"
+}
+
+variable "proxmox_vm_datastore" {
+  description = "Proxmox datastore ID for VM disks"
+  type        = string
+  default     = "VM-storage"
+}
+
+# ==============================================================================
+# Talos & Kubernetes Version Variables
+# ==============================================================================
+variable "talos_version" {
+  description = "Talos Linux version to deploy (from Talos Image Factory)"
+  type        = string
+  default     = "v1.9.4"
+}
+
+variable "kubernetes_version" {
+  description = "Kubernetes version to deploy on Talos"
+  type        = string
+  default     = "1.32.2"
+}
+
+variable "talos_system_extensions" {
+  description = "Official Talos system extensions to bake into the factory image (qemu-guest-agent for Proxmox, iscsi-tools & util-linux-tools for Longhorn)"
+  type        = list(string)
+  default = [
+    "siderolabs/qemu-guest-agent",
+    "siderolabs/iscsi-tools",
+    "siderolabs/util-linux-tools",
+  ]
+}
+
+variable "download_talos_iso" {
+  description = "Whether Terraform should automatically download the Talos Factory ISO onto Proxmox"
+  type        = bool
+  default     = true
+}
+
+variable "existing_talos_iso_file_id" {
+  description = "If download_talos_iso is false, specify the existing Proxmox ISO file_id (e.g. local:iso/talos-nocloud-amd64.iso)"
+  type        = string
+  default     = ""
+}
+
+# ==============================================================================
+# Cluster & Network Variables
+# ==============================================================================
+variable "cluster_name" {
+  description = "Name of the Talos Kubernetes cluster"
+  type        = string
+  default     = "homelab-talos"
+}
+
+variable "cluster_vip" {
+  description = "Optional Control Plane Virtual IP (VIP) managed natively by Talos for HA. Leave empty to use the primary control plane node IP directly."
+  type        = string
+  default     = ""
+}
+
+variable "network_bridge" {
+  description = "Proxmox network bridge for cluster VMs"
+  type        = string
+  default     = "vmbr0"
+}
+
+variable "network_cidr_prefix" {
+  description = "Subnet CIDR prefix length (e.g. 24 for /24)"
+  type        = number
+  default     = 24
+}
+
+variable "network_gateway" {
+  description = "Default network gateway IPv4 address"
+  type        = string
+  default     = "10.10.20.1"
+}
+
+variable "dns_servers" {
+  description = "DNS servers configured on Talos nodes"
+  type        = list(string)
+  default     = ["10.10.20.1", "1.1.1.1", "8.8.8.8"]
+}
+
+variable "pod_subnet" {
+  description = "RFC1918 CIDR range for Kubernetes Pods"
+  type        = string
+  default     = "10.244.0.0/16"
+}
+
+variable "service_subnet" {
+  description = "RFC1918 CIDR range for Kubernetes Services"
+  type        = string
+  default     = "10.96.0.0/12"
+}
+
+variable "cni_provider" {
+  description = "CNI provider to use: 'cilium' (recommended, replaces kube-proxy) or 'flannel' (Talos built-in default)"
+  type        = string
+  default     = "cilium"
+  validation {
+    condition     = contains(["cilium", "flannel"], var.cni_provider)
+    error_message = "cni_provider must be either 'cilium' or 'flannel'."
+  }
+}
+
+variable "cilium_version" {
+  description = "Cilium Helm chart version"
+  type        = string
+  default     = "1.17.1"
+}
+
+variable "allow_scheduling_on_control_planes" {
+  description = "Allow workload pods to schedule on control plane nodes"
+  type        = bool
+  default     = false
+}
+
+# ==============================================================================
+# Layer 2: ArgoCD & GitOps Variables
+# ==============================================================================
+variable "enable_argocd" {
+  description = "Deploy ArgoCD onto the cluster via Helm"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_namespace" {
+  description = "Kubernetes namespace for ArgoCD"
+  type        = string
+  default     = "argocd"
+}
+
+variable "argocd_chart_version" {
+  description = "Version of the argo-cd Helm chart from https://argoproj.github.io/argo-helm"
+  type        = string
+  default     = "9.4.17"
+}
+
+variable "argocd_domain" {
+  description = "FQDN for ArgoCD UI Ingress"
+  type        = string
+  default     = "argocd-mgmt.homelab.cloud"
+}
+
+variable "argocd_ha_enabled" {
+  description = "Enable Redis HA and multi-replica autoscaling for ArgoCD"
+  type        = bool
+  default     = false
+}
+
+variable "argocd_admin_password" {
+  description = "Optional custom plaintext password for ArgoCD admin user (automatically bcrypt-hashed). Leave empty to use ArgoCD's auto-generated initial secret."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "gitops_repo_url" {
+  description = "Git repository URL containing Helm charts / manifests for ArgoCD ApplicationSets"
+  type        = string
+  default     = "https://github.com/zelinar/Infra_talos.git"
+}
+
+variable "gitops_repo_revision" {
+  description = "Git branch or tag tracked by ArgoCD ApplicationSets"
+  type        = string
+  default     = "main"
+}
+
+variable "gitops_core_services_path" {
+  description = "Directory path inside gitops_repo_url for core cluster services"
+  type        = string
+  default     = "core_services"
+}
+
+variable "gitops_observability_path" {
+  description = "Directory path inside gitops_repo_url for observability services"
+  type        = string
+  default     = "observability"
+}
+
+variable "enable_argocd_appsets" {
+  description = "Deploy ArgoCD ApplicationSets (core-services & observability) automatically"
+  type        = bool
+  default     = true
+}
+
+# ==============================================================================
+# Node Definitions
+# ==============================================================================
+variable "nodes" {
+  description = "Map of Talos cluster nodes (controlplane and worker)"
+  type = map(object({
+    role              = string              # "controlplane" or "worker"
+    ip                = string              # Static IPv4 address
+    vm_id             = optional(number)    # Optional explicit Proxmox VMID
+    target_node       = optional(string)    # Optional override for Proxmox node name
+    cores             = optional(number, 4) # CPU cores
+    sockets           = optional(number, 1) # CPU sockets
+    cpu_type          = optional(string, "host")
+    memory_mb         = optional(number, 8192) # RAM in MB
+    os_disk_size_gb   = optional(number, 50)   # OS disk (scsi0 / /dev/sda) in GB
+    data_disk_size_gb = optional(number, 0)    # Optional dedicated Longhorn disk (scsi1 / /dev/sdb) in GB (0 = use OS disk)
+    onboot            = optional(bool, true)
+  }))
+
+  default = {
+    "k8s-talos-cp-01" = {
+      role              = "controlplane"
+      ip                = "10.10.20.120"
+      vm_id             = 210
+      cores             = 4
+      memory_mb         = 4096
+      os_disk_size_gb   = 50
+      data_disk_size_gb = 0
+    }
+    "k8s-talos-worker-01" = {
+      role              = "worker"
+      ip                = "10.10.20.121"
+      vm_id             = 211
+      cores             = 4
+      memory_mb         = 8192
+      os_disk_size_gb   = 100
+      data_disk_size_gb = 0
+    }
+    "k8s-talos-worker-02" = {
+      role              = "worker"
+      ip                = "10.10.20.122"
+      vm_id             = 212
+      cores             = 4
+      memory_mb         = 8192
+      os_disk_size_gb   = 100
+      data_disk_size_gb = 0
+    }
+    "k8s-talos-worker-03" = {
+      role              = "worker"
+      ip                = "10.10.20.123"
+      vm_id             = 213
+      cores             = 4
+      memory_mb         = 8192
+      os_disk_size_gb   = 100
+      data_disk_size_gb = 0
+    }
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.nodes : contains(["controlplane", "worker"], v.role)
+    ])
+    error_message = "Each node's role must be either 'controlplane' or 'worker'."
+  }
+
+  validation {
+    condition     = length([for k, v in var.nodes : k if v.role == "controlplane"]) >= 1
+    error_message = "At least one node with role = 'controlplane' must be defined."
+  }
+}

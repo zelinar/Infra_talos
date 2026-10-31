@@ -1,0 +1,5 @@
+apiVersion: v2
+name: metallb-custom-ip-pool
+description: MetalLB IPAddressPool and L2Advertisement for Homelab
+type: application
+version: 1.0.0

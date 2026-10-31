@@ -1,0 +1,30 @@
+{{- /*
+templates/vlcluster.yaml
+
+Renders a VLCluster custom resource from:
+.Values["victoria-logs"].vlcluster
+*/ -}}
+{{- $cfg := index .Values "victoria-logs" -}}
+{{- if and $cfg $cfg.vlcluster $cfg.vlcluster.enabled -}}
+{{- $root := . -}}
+apiVersion: operator.victoriametrics.com/v1
+kind: VLCluster
+metadata:
+  name: {{ default "vlcluster" $cfg.vlcluster.name }}
+  {{- if $cfg.vlcluster.setNamespace }}
+  namespace: {{ $root.Release.Namespace }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: {{ $root.Chart.Name }}
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
+    helm.sh/chart: {{ printf "%s-%s" $root.Chart.Name $root.Chart.Version | quote }}
+  {{- with $cfg.vlcluster.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+spec:
+{{- with $cfg.vlcluster.spec }}
+{{ toYaml . | indent 2 }}
+{{- end }}
+{{- end }}

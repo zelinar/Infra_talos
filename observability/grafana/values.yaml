@@ -1,0 +1,83 @@
+grafana:
+  enabled: true
+  plugins:
+    - victoriametrics-metrics-datasource
+    - victoriametrics-logs-datasource
+
+  image:
+    tag: "12.3.2"
+
+  replicas: 1
+  deploymentStrategy:
+    type: Recreate
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    path: /
+    pathType: Prefix
+    hosts:
+      - "grafana.homelab.cloud"
+    tls:
+      - hosts:
+          - "grafana.homelab.cloud"
+        secretName: "wildcard-homelab-secret"
+
+  grafana.ini:
+    server:
+      root_url: "https://grafana.homelab.cloud/"
+      domain: "grafana.homelab.cloud"
+    analytics:
+      reporting_enabled: false
+      check_for_updates: true
+
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: longhorn
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # Pre-provisioned VictoriaMetrics & VictoriaLogs Datasources
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        # Prometheus-compatible query endpoint (VMSelect)
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
+          isDefault: true
+          editable: true
+
+        # Native VictoriaMetrics datasource plugin (VMSelect)
+        - name: VictoriaMetrics
+          uid: victoriametrics
+          type: victoriametrics-metrics-datasource
+          access: proxy
+          url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
+          isDefault: false
+          editable: true
+
+        # VictoriaLogs datasource plugin (VLSelect)
+        - name: VictoriaLogs
+          uid: victorialogs
+          type: victoriametrics-logs-datasource
+          access: proxy
+          url: "http://vlselect-vlcluster.monitoring.svc:9471"
+          editable: true

@@ -1,0 +1,65 @@
+- apiVersion: argoproj.io/v1alpha1
+  kind: AppProject
+  metadata:
+    name: core-services
+    namespace: ${argocd_namespace}
+    annotations:
+      argocd.argoproj.io/sync-wave: "-10"
+  spec:
+    description: Core cluster infrastructure services (Networking, TLS, Storage, Ingress, Operators)
+    sourceRepos:
+      - ${gitops_repo_url}
+      - "*"
+    clusterResourceWhitelist:
+      - group: "*"
+        kind: "*"
+    namespaceResourceWhitelist:
+      - group: "*"
+        kind: "*"
+    destinations:
+      - namespace: "*"
+        server: https://kubernetes.default.svc
+
+- apiVersion: argoproj.io/v1alpha1
+  kind: AppProject
+  metadata:
+    name: observability
+    namespace: ${argocd_namespace}
+    annotations:
+      argocd.argoproj.io/sync-wave: "-10"
+  spec:
+    description: Cluster monitoring, logging, and telemetry stack (Prometheus, Grafana, Loki, Alloy)
+    sourceRepos:
+      - ${gitops_repo_url}
+      - "*"
+    clusterResourceWhitelist:
+      - group: "*"
+        kind: "*"
+    namespaceResourceWhitelist:
+      - group: "*"
+        kind: "*"
+    destinations:
+      - namespace: "*"
+        server: https://kubernetes.default.svc
+
+- apiVersion: argoproj.io/v1alpha1
+  kind: AppProject
+  metadata:
+    name: workloads
+    namespace: ${argocd_namespace}
+    annotations:
+      argocd.argoproj.io/sync-wave: "-10"
+  spec:
+    description: Homelab applications and workloads
+    sourceRepos:
+      - ${gitops_repo_url}
+      - "*"
+    clusterResourceWhitelist:
+      - group: "*"
+        kind: "*"
+    namespaceResourceWhitelist:
+      - group: "*"
+        kind: "*"
+    destinations:
+      - namespace: "*"
+        server: https://kubernetes.default.svc

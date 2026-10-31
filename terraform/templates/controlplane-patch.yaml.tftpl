@@ -1,0 +1,53 @@
+machine:
+  install:
+    disk: /dev/sda
+    image: ${installer_image}
+    wipe: false
+  network:
+    hostname: ${hostname}
+    nameservers:
+%{ for ns in dns_servers ~}
+      - ${ns}
+%{ endfor ~}
+    interfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: false
+        addresses:
+          - ${ip}/${cidr_prefix}
+        routes:
+          - network: 0.0.0.0/0
+            gateway: ${gateway}
+%{ if cluster_vip != "" ~}
+        vip:
+          ip: ${cluster_vip}
+%{ endif ~}
+  kubelet:
+    extraMounts:
+      - destination: /var/lib/longhorn
+        type: bind
+        source: /var/lib/longhorn
+        options:
+          - bind
+          - rshared
+          - rw
+%{ if has_data_disk ~}
+  disks:
+    - device: /dev/sdb
+      partitions:
+        - mountpoint: /var/lib/longhorn
+%{ endif ~}
+
+cluster:
+  allowSchedulingOnControlPlanes: ${allow_scheduling_on_control_planes}
+  network:
+    podSubnets:
+      - ${pod_subnet}
+    serviceSubnets:
+      - ${service_subnet}
+%{ if cni_provider == "cilium" ~}
+    cni:
+      name: none
+  proxy:
+    disabled: true
+%{ endif ~}

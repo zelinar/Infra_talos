@@ -1,0 +1,9 @@
+longhorn:
+  longhornUI:
+    replicas: 1
+  defaultSettings:
+    defaultDataPath: /var/lib/longhorn
+    defaultDataLocality: best-effort
+    defaultReplicaCount: 3
+  preUpgradeChecker:
+    jobEnabled: false

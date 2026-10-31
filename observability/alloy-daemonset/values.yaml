@@ -1,0 +1,347 @@
+global:
+  cluster:
+    name: "homelab-talos"
+    environment: "homelab"
+    region: "onprem"
+    owner: "homelab"
+  destinations:
+    metricsRemoteWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/0/prometheus/api/v1/write"
+    logsWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/loki/api/v1/push?_msg_field=msg,message,_msg"
+
+# ==============================================================================
+# LINUX DAEMONSET (Agent - Local Node Scraping on Talos Linux)
+# ==============================================================================
+alloy-linux-ds:
+  controller:
+    type: daemonset
+    priorityClassName: system-node-critical
+    terminationGracePeriodSeconds: 60
+    nodeSelector:
+      kubernetes.io/os: linux
+    tolerations:
+      - operator: "Exists"
+    volumes:
+      extra:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: vm-auth
+          secret:
+            secretName: alloy-active-token
+            defaultMode: 0400
+        - name: tmp-storage
+          emptyDir:
+            sizeLimit: 2Gi
+  serviceAccount:
+    create: true
+    name: alloy-linux-ds
+  alloy:
+    enableReporting: false
+    storagePath: /tmp/alloy/data
+    extraEnv:
+      - name: HOST_IP
+        valueFrom:
+          fieldRef:
+            fieldPath: status.hostIP
+    livenessProbe:
+      httpGet:
+        path: /-/healthy
+        port: 12345
+        scheme: HTTP
+      initialDelaySeconds: 30
+      timeoutSeconds: 5
+      periodSeconds: 30
+      failureThreshold: 5
+    readinessProbe:
+      httpGet:
+        path: /-/ready
+        port: 12345
+        scheme: HTTP
+      initialDelaySeconds: 15
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 3
+    mounts:
+      varlog: false
+      dockercontainers: false
+      extra:
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: rootfs
+          mountPath: /host/root
+          mountPropagation: HostToContainer
+          readOnly: true
+        - name: vm-auth
+          mountPath: /etc/vm-auth
+          readOnly: true
+        - name: tmp-storage
+          mountPath: /tmp
+    resources:
+      requests:
+        cpu: 50m
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+    securityContext:
+      privileged: true
+      runAsUser: 0
+      readOnlyRootFilesystem: true
+    configMap:
+      create: false
+      name: alloy-linux-ds-config
+      key: config.alloy
+
+# ==============================================================================
+# SHARED DAEMONSET ALLOY CONFIGURATION BASE
+# ==============================================================================
+configAgentBase:
+  scrapeInterval: "30s"
+  bearerAuth:
+    enabled: true
+    tokenFile: "/etc/vm-auth/token"
+  filterMetricsRegex: "^(go_.*|.*_bucket|container_fs_.*|container_memory_failures.*|kube_.*_labels|kube_.*_annotations|flag|grpc_.*|container_tasks_state|kube_pod_tolerations)$"
+  sections:
+    destinations:
+      enabled: true
+      content: |
+        // ---------------------
+        // GLOBAL DESTINATIONS
+        // ---------------------
+        prometheus.remote_write "victoriametrics" {
+          endpoint {
+            url = {{ required "FATAL: global.destinations.metricsRemoteWriteUrl must be set!" .Values.global.destinations.metricsRemoteWriteUrl | quote }}
+            {{- $bearerAuth := .AlloyConfig.bearerAuth | default dict -}}
+            {{- $bearerEnabled := true -}}
+            {{- if hasKey $bearerAuth "enabled" -}}
+            {{- $bearerEnabled = $bearerAuth.enabled -}}
+            {{- end -}}
+            {{- if $bearerEnabled }}
+            bearer_token_file = {{ default "/etc/vm-auth/token" $bearerAuth.tokenFile | quote }}
+            {{- end }}
+          }
+        }
+
+        loki.write "victoriametrics" {
+          endpoint {
+            url = {{ required "FATAL: global.destinations.logsWriteUrl must be set!" .Values.global.destinations.logsWriteUrl | quote }}
+            {{- $bearerAuth := .AlloyConfig.bearerAuth | default dict -}}
+            {{- $bearerEnabled := true -}}
+            {{- if hasKey $bearerAuth "enabled" -}}
+            {{- $bearerEnabled = $bearerAuth.enabled -}}
+            {{- end -}}
+            {{- if $bearerEnabled }}
+            bearer_token_file = {{ default "/etc/vm-auth/token" $bearerAuth.tokenFile | quote }}
+            {{- end }}
+          }
+        }
+    filterMetrics:
+      enabled: true
+      content: |
+        // ---------------------
+        // METRICS FILTERING
+        // ---------------------
+        prometheus.relabel "filter_metrics" {
+          forward_to = [prometheus.remote_write.victoriametrics.receiver]
+
+          rule {
+            source_labels = ["__name__"]
+            regex         = {{ required "FATAL: configAgentBase.filterMetricsRegex must be set!" .AlloyConfig.filterMetricsRegex | quote }}
+            action        = "drop"
+          }
+
+          rule {
+            regex  = "id"
+            action = "labeldrop"
+          }
+
+          // Universal labels applied to all metrics regardless of source
+          rule {
+            target_label = "cluster"
+            replacement  = {{ required "FATAL: global.cluster.name must be set!" .Values.global.cluster.name | quote }}
+          }
+          rule {
+            target_label = "env"
+            replacement  = {{ required "FATAL: global.cluster.environment must be set!" .Values.global.cluster.environment | quote }}
+          }
+          rule {
+            target_label = "region"
+            replacement  = {{ required "FATAL: global.cluster.region must be set!" .Values.global.cluster.region | quote }}
+          }
+          rule {
+            target_label = "owner"
+            replacement  = {{ required "FATAL: global.cluster.owner must be set!" .Values.global.cluster.owner | quote }}
+          }
+        }
+
+# ==============================================================================
+# LINUX ALLOY CONFIGURATION
+# ==============================================================================
+configLinux:
+  sectionOrder:
+    - destinations
+    - nodeMetrics
+    - kubeletCadvisor
+    - nodeLogs
+    - filterMetrics
+  sections:
+    nodeMetrics:
+      enabled: true
+      content: |
+        // ---------------------
+        // LOCAL NODE METRICS
+        // ---------------------
+        prometheus.exporter.unix "node_metrics" {
+          rootfs_path = "/host/root"
+
+          disable_collectors = [
+            "tapestats",
+            "rapl",
+          ]
+        }
+
+        prometheus.scrape "node_metrics" {
+          targets         = prometheus.exporter.unix.node_metrics.targets
+          forward_to      = [prometheus.relabel.node_label.receiver]
+          scrape_interval = {{ required "FATAL: configAgentBase.scrapeInterval must be set!" .AlloyConfig.scrapeInterval | quote }}
+        }
+
+        prometheus.relabel "node_label" {
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+
+          rule {
+            target_label = "instance"
+            replacement  = coalesce(sys.env("HOSTNAME"), constants.hostname)
+          }
+
+          rule {
+            target_label = "device"
+            replacement  = "node"
+          }
+
+          rule {
+            target_label = "job"
+            replacement  = "node_metrics"
+          }
+        }
+    kubeletCadvisor:
+      enabled: true
+      content: |
+        // ---------------------
+        // LOCAL NODE KUBELET METRICS (PVC capacity/usage, volume stats)
+        // ---------------------
+        prometheus.scrape "kubelet" {
+          targets = [{
+            "__address__"      = sys.env("HOST_IP") + ":10250",
+            "__metrics_path__" = "/metrics",
+          }]
+
+          scheme            = "https"
+          bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          scrape_interval   = {{ required "FATAL: configAgentBase.scrapeInterval must be set!" .AlloyConfig.scrapeInterval | quote }}
+          forward_to        = [prometheus.relabel.kubelet_metrics_label.receiver]
+
+          tls_config {
+            insecure_skip_verify = true
+          }
+        }
+
+        prometheus.relabel "kubelet_metrics_label" {
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+
+          rule {
+            target_label = "instance"
+            replacement  = coalesce(sys.env("HOSTNAME"), constants.hostname)
+          }
+          rule {
+            target_label = "device"
+            replacement  = "node"
+          }
+          rule {
+            target_label = "job"
+            replacement  = "kubelet"
+          }
+
+          rule {
+            source_labels = ["__name__"]
+            regex         = "kubelet_volume_stats_.*"
+            action        = "keep"
+          }
+        }
+
+        // ---------------------
+        // LOCAL NODE KUBELET / CADVISOR METRICS
+        // ---------------------
+        prometheus.scrape "kubelet_cadvisor" {
+          targets = [{
+            "__address__"      = sys.env("HOST_IP") + ":10250",
+            "__metrics_path__" = "/metrics/cadvisor",
+          }]
+
+          scheme            = "https"
+          bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          scrape_interval   = {{ required "FATAL: configAgentBase.scrapeInterval must be set!" .AlloyConfig.scrapeInterval | quote }}
+          forward_to        = [prometheus.relabel.kubelet_label.receiver]
+
+          tls_config {
+            insecure_skip_verify = true
+          }
+        }
+
+        prometheus.relabel "kubelet_label" {
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+
+          rule {
+            target_label = "instance"
+            replacement  = coalesce(sys.env("HOSTNAME"), constants.hostname)
+          }
+          rule {
+            target_label = "device"
+            replacement  = "node"
+          }
+          rule {
+            target_label = "job"
+            replacement  = "kubelet_cadvisor"
+          }
+
+          rule {
+            regex  = "name"
+            action = "labeldrop"
+          }
+
+          rule {
+            source_labels = ["__name__"]
+            regex         = "container_cpu_(cfs_throttled_seconds_total|load_average_10s|system_seconds_total|user_seconds_total)"
+            action        = "drop"
+          }
+          rule {
+            source_labels = ["__name__"]
+            regex         = "container_memory_(mapped_file|swap)|container_(file_descriptors|threads_max)|container_spec.*"
+            action        = "drop"
+          }
+          rule {
+            source_labels = ["__name__", "interface"]
+            regex         = "container_network_.*;(cali|cilium|cni|lxc|nodelocaldns|tunl).*"
+            action        = "drop"
+          }
+          rule {
+            source_labels = ["id", "pod"]
+            regex         = ".+;"
+            action        = "drop"
+          }
+        }
+    nodeLogs:
+      # Disabled by default on Talos Linux (immutable OS has no /var/log/syslog or /var/log/auth.log;
+      # Kubernetes pod logs are collected via K8s API in grafana-alloy).
+      enabled: false
+      content: ""

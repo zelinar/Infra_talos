@@ -1,0 +1,94 @@
+victoria-logs:
+  ingress:
+    enabled: false
+    ingressDomain: "homelab.cloud"
+    className: traefik
+    setNamespace: false
+    namePrefix: ""
+    annotations: {}
+    ingresses: []
+
+  vlcluster:
+    enabled: true
+    name: vlcluster
+    setNamespace: false
+    annotations: {}
+
+    spec:
+      retentionPeriod: "30d"
+      retentionMaxDiskSpaceUsageBytes: "12GB"
+
+      vlstorage:
+        replicaCount: 2
+        storageDataPath: "/vl-data"
+        storage:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              storageClassName: longhorn
+              resources:
+                requests:
+                  storage: 15Gi
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumes:
+          - name: tmp-storage
+            emptyDir:
+              sizeLimit: 2Gi
+        volumeMounts:
+          - name: tmp-storage
+            mountPath: /tmp
+
+      vlselect:
+        replicaCount: 1
+        extraArgs:
+          search.maxConcurrentRequests: "16"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumes:
+          - name: tmp-storage
+            emptyDir:
+              sizeLimit: 2Gi
+        volumeMounts:
+          - name: tmp-storage
+            mountPath: /tmp
+
+      vlinsert:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumes:
+          - name: tmp-storage
+            emptyDir:
+              sizeLimit: 2Gi
+        volumeMounts:
+          - name: tmp-storage
+            mountPath: /tmp
+
+  vlagent:
+    enabled: false
+    name: vlcluster-agent
+    setNamespace: false
+    annotations: {}
+    spec: {}

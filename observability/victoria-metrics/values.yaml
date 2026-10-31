@@ -1,0 +1,97 @@
+victoria-metrics:
+  ingress:
+    enabled: false
+    ingressDomain: "homelab.cloud"
+    className: traefik
+    setNamespace: false
+    namePrefix: ""
+    annotations: {}
+    ingresses: []
+
+  vmcluster:
+    enabled: true
+    name: vmcluster
+    setNamespace: false
+    annotations: {}
+
+    spec:
+      retentionPeriod: "1"
+      replicationFactor: 2
+
+      vmstorage:
+        replicaCount: 2
+        storageDataPath: "/vm-data"
+        storage:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              storageClassName: longhorn
+              resources:
+                requests:
+                  storage: 15Gi
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1536Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumes:
+          - name: tmp-storage
+            emptyDir:
+              sizeLimit: 2Gi
+        volumeMounts:
+          - name: tmp-storage
+            mountPath: /tmp
+
+      vmselect:
+        replicaCount: 1
+        cacheMountPath: "/select-cache"
+        extraArgs:
+          search.maxUniqueTimeseries: "1000000"
+          search.maxQueryDuration: "60s"
+        storage:
+          volumeClaimTemplate:
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              storageClassName: longhorn
+              resources:
+                requests:
+                  storage: 5Gi
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumes:
+          - name: tmp-storage
+            emptyDir:
+              sizeLimit: 2Gi
+        volumeMounts:
+          - name: tmp-storage
+            mountPath: /tmp
+
+      vminsert:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumes:
+          - name: tmp-storage
+            emptyDir:
+              sizeLimit: 2Gi
+        volumeMounts:
+          - name: tmp-storage
+            mountPath: /tmp

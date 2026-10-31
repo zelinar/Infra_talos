@@ -1,0 +1,12 @@
+apiVersion: v2
+name: alloy-daemonset
+description: Grafana Alloy DaemonSet for node metrics (unix exporter) and kubelet/cAdvisor scraping on Talos Linux
+type: application
+version: 1.0.0
+appVersion: "1.14.0"
+
+dependencies:
+  - name: alloy
+    alias: alloy-linux-ds
+    version: 1.14.4
+    repository: https://grafana.github.io/helm-charts/

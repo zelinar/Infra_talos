@@ -1,0 +1,38 @@
+prometheus-operator-crds:
+  enabled: true
+
+victoria-metrics-operator:
+  replicaCount: 1
+
+  crds:
+    enabled: true
+    plain: true
+    cleanup:
+      enabled: true
+
+  operator:
+    disable_prometheus_converter: false
+    enable_converter_ownership: true
+
+  serviceMonitor:
+    enabled: false
+
+  env:
+    - name: VM_METRICS_VERSION
+      value: v1.145.0
+    - name: VM_LOGS_VERSION
+      value: v1.51.0
+    - name: VM_VMALERTMANAGER_VERSION
+      value: v0.33.0
+    - name: VM_VMBACKUP_VERSION
+      value: v1.145.0
+    - name: VM_VMAGENT_READYTIMEOUT
+      value: "30s"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

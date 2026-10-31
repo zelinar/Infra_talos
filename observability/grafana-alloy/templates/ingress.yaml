@@ -1,0 +1,45 @@
+{{- $root := . }}
+{{- $cfg  := index .Values "alloy-external" "customIngresses" | default dict }}
+{{- $enabled := true }}
+{{- if hasKey $cfg "enabled" }}
+{{- $enabled = $cfg.enabled }}
+{{- end }}
+{{- if $enabled }}
+{{- $defaults := $cfg.defaults | default dict }}
+{{- range $name, $ingress := $cfg.entries }}
+{{- $entryEnabled := true }}
+{{- if hasKey $ingress "enabled" }}
+{{- $entryEnabled = $ingress.enabled }}
+{{- end }}
+{{- if $entryEnabled }}
+{{- $paths := $ingress.paths | default (list (dict "path" $ingress.path "pathType" $ingress.pathType "port" $ingress.port)) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "grafana-alloy.fullname" $root }}-{{ $name }}
+  namespace: {{ include "grafana-alloy.namespace" $root }}
+  labels:
+    {{- include "grafana-alloy.labels" $root | nindent 4 }}
+spec:
+  ingressClassName: {{ $ingress.ingressClassName | default $defaults.ingressClassName }}
+  rules:
+    - host: {{ $ingress.host }}
+      http:
+        paths:
+          {{- range $p := $paths }}
+          - path: {{ $p.path | default "/" }}
+            pathType: {{ $p.pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "grafana-alloy.serviceName" $root }}
+                port:
+                  number: {{ $p.port }}
+          {{- end }}
+  tls:
+    - secretName: {{ $ingress.tlsSecret | default $defaults.tlsSecret }}
+      hosts:
+        - {{ $ingress.host }}
+{{- end }}
+{{- end }}
+{{- end }}

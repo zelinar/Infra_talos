@@ -1,0 +1,901 @@
+global:
+  crds:
+    create: false
+  cluster:
+    name: "homelab-talos"
+    environment: "homelab"
+    region: "onprem"
+    owner: "homelab"
+  destinations:
+    metricsRemoteWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/0/prometheus/api/v1/write"
+    logsWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/loki/api/v1/push?_msg_field=msg,message,_msg"
+
+alloy-external:
+  enabled: true
+  secretStoreRef:
+    name: vault-platform-kv
+    kind: ClusterSecretStore
+  snmpSecret:
+    name: alloy-external-snmp-config
+    refreshInterval: "15m"
+    configMapName: alloy-external-snmp-config-tpl
+    configMapKey: snmp.yml
+    fields:
+      - auth_protocol
+      - password
+      - priv_password
+      - priv_protocol
+      - username
+    profiles: []
+
+  controller:
+    type: deployment
+    replicas: 2
+    podLabels:
+      alloy.grafana.com/role: external
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    autoscaling:
+      horizontal:
+        enabled: false
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                  - key: alloy.grafana.com/role
+                    operator: In
+                    values:
+                      - external
+    volumes:
+      extra:
+        - name: vm-auth
+          secret:
+            secretName: alloy-active-token
+            defaultMode: 0400
+        - name: tmp-storage
+          emptyDir:
+            sizeLimit: 2Gi
+
+  alloy:
+    enableReporting: false
+    extraPorts:
+      - name: loki-api
+        port: 9000
+        targetPort: 9000
+        protocol: TCP
+      - name: prom-receive
+        port: 9001
+        targetPort: 9001
+        protocol: TCP
+      - name: rfc3164-tcp
+        port: 1524
+        targetPort: 1524
+        protocol: TCP
+      - name: rfc3164-udp
+        port: 1524
+        targetPort: 1524
+        protocol: UDP
+      - name: rfc5424-tcp
+        port: 1525
+        targetPort: 1525
+        protocol: TCP
+      - name: rfc5424-udp
+        port: 1525
+        targetPort: 1525
+        protocol: UDP
+    livenessProbe:
+      httpGet:
+        path: /-/ready
+        port: 12345
+        scheme: HTTP
+      initialDelaySeconds: 15
+      timeoutSeconds: 5
+      periodSeconds: 30
+      failureThreshold: 3
+    resources:
+      requests:
+        cpu: 50m
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+    clustering:
+      enabled: true
+      name: external-metrics-alloy-cluster
+    configMap:
+      create: false
+      name: alloy-external-config
+      key: config.alloy
+    storagePath: /tmp/alloy/data
+    securityContext:
+      readOnlyRootFilesystem: true
+    mounts:
+      extra:
+        - name: vm-auth
+          mountPath: /etc/vm-auth
+          readOnly: true
+        - name: tmp-storage
+          mountPath: /tmp
+  service:
+    enabled: true
+
+  customIngresses:
+    enabled: true
+    defaults:
+      ingressClassName: traefik
+      tlsSecret: "wildcard-homelab-secret"
+    entries:
+      logs:
+        host: "alloy-logs.homelab.cloud"
+        paths:
+          - path: /loki/api/v1/push
+            port: 9000
+      metrics:
+        host: "alloy-metrics.homelab.cloud"
+        paths:
+          - path: /api/v1/metrics/write
+            port: 9001
+          - path: /api/v1/write
+            port: 9001
+
+  tcpUdpRoutes:
+    enabled: false
+    entries:
+      syslog-rfc3164:
+        protocols: [tcp, udp]
+        entryPoints:
+          tcp: [rfc3164-tcp]
+          udp: [rfc3164-udp]
+        service:
+          port: 1524
+      syslog-rfc5424:
+        protocols: [tcp, udp]
+        entryPoints:
+          tcp: [rfc5424-tcp]
+          udp: [rfc5424-udp]
+        service:
+          port: 1525
+
+configExternal:
+  scrapeInterval: "30s"
+  filterMetricsRegex: "^(go_.*|.*_bucket|container_fs_.*|container_memory_failures.*|flag|grpc_.*|container_tasks_state)$"
+
+  snmp:
+    config_file: "/etc/snmp_exporter/snmp.yml"
+    defaultScrapeTimeout: "15s"
+    defaultLabels:
+      owner: homelab
+    defaultAuth: ""
+    walkParams:
+      fast:
+        timeout: "5s"
+        retries: 2
+      slow:
+        timeout: "15s"
+        retries: 3
+    targets: []
+
+  blackbox:
+    defaultModule: http_2xx
+    defaultLabels:
+      site: internal
+    config: |
+      modules:
+        http_2xx:
+          prober: http
+          timeout: 5s
+          http:
+            preferred_ip_protocol: ip4
+
+        http_2xx_or_3xx:
+          prober: http
+          timeout: 5s
+          http:
+            preferred_ip_protocol: ip4
+            valid_status_codes: [200, 201, 202, 203, 204, 205, 206, 300, 301, 302, 303, 307, 308]
+    targets:
+      - name: google-com
+        address: "https://google.com"
+        module: "http_2xx_or_3xx"
+        labels:
+          site: external
+
+  sectionOrder:
+    - destinations
+    - podDiscovery
+    - podLogs
+    - serviceMonitors
+    - promReceive
+    - snmpTargets
+    - blackboxTargets
+    - lokiReceive
+    - syslog
+    - filterMetrics
+  sections:
+    destinations:
+      enabled: true
+      content: |
+        // ---------------------
+        // GLOBAL DESTINATIONS
+        // ---------------------
+        prometheus.remote_write "victoriametrics" {
+          endpoint {
+            url               = {{ required "FATAL: global.destinations.metricsRemoteWriteUrl must be set!" .Values.global.destinations.metricsRemoteWriteUrl | quote }}
+            bearer_token_file = "/etc/vm-auth/token"
+          }
+        }
+
+        loki.write "victoriametrics" {
+          endpoint {
+            url               = {{ required "FATAL: global.destinations.logsWriteUrl must be set!" .Values.global.destinations.logsWriteUrl | quote }}
+            bearer_token_file = "/etc/vm-auth/token"
+          }
+        }
+    podDiscovery:
+      enabled: true
+      content: |
+        // ---------------------
+        // POD DISCOVERY
+        // ---------------------
+        discovery.kubernetes "pods" {
+          role = "pod"
+        }
+
+        discovery.relabel "pods" {
+          targets = discovery.kubernetes.pods.targets
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            target_label  = "namespace"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            target_label  = "pod"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "container"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_node_name"]
+            target_label  = "node"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+            target_label  = "workload"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app"]
+            regex         = "(.+)"
+            target_label  = "workload"
+          }
+        }
+    podLogs:
+      enabled: true
+      content: |
+        // ---------------------
+        // POD LOGS
+        // ---------------------
+        loki.source.kubernetes "pod_logs" {
+          targets    = discovery.relabel.pods.output
+          forward_to = [loki.process.pod_logs.receiver]
+
+          clustering {
+            enabled = true
+          }
+        }
+
+        loki.process "pod_logs" {
+          stage.static_labels {
+            values = {
+              cluster  = {{ required "FATAL: global.cluster.name must be set!" .Values.global.cluster.name | quote }},
+              env      = {{ required "FATAL: global.cluster.environment must be set!" .Values.global.cluster.environment | quote }},
+              region   = {{ required "FATAL: global.cluster.region must be set!" .Values.global.cluster.region | quote }},
+              owner    = {{ required "FATAL: global.cluster.owner must be set!" .Values.global.cluster.owner | quote }},
+              device   = "pod",
+              job      = "pod_logs",
+            }
+          }
+
+          stage.labels {
+            values = {
+              namespace = "namespace",
+              workload  = "workload",
+            }
+          }
+
+          stage.structured_metadata {
+            values = {
+              pod       = "pod",
+              container = "container",
+              node      = "node",
+            }
+          }
+
+          stage.decolorize {}
+
+          stage.drop {
+            expression          = "(?i)(\"GET /health|GET /healthz|GET /readyz|GET /livez|GET /metrics|GET /ping)"
+            drop_counter_reason = "health_check"
+          }
+
+          stage.multiline {
+            firstline     = "^(\\d{4}-\\d{2}-\\d{2}T|\\d{4}-\\d{2}-\\d{2} |\\d{4}/\\d{2}/\\d{2}|[IWEF]\\d{4} |ts=|time=\"\\d{4}|\\{|\\[|\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})"
+            max_wait_time = "3s"
+            max_lines     = 128
+          }
+
+          stage.match {
+            selector      = "{job=\"pod_logs\"}"
+            pipeline_name = "detect_json"
+
+            stage.regex {
+              expression = "^(?P<fmt_json>\\{)"
+            }
+          }
+
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_json!=\"{\"}"
+            pipeline_name = "detect_logfmt"
+
+            stage.regex {
+              expression = "(?:^|\\s)(?P<fmt_logfmt>(?:ts|time)=\"?\\d{4})"
+            }
+          }
+
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_json!=\"{\", fmt_logfmt=\"\"}"
+            pipeline_name = "detect_klog"
+
+            stage.regex {
+              expression = "^(?P<fmt_klog>[IWEF]\\d{4} \\d{2}:\\d{2}:\\d{2})"
+            }
+          }
+
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_json!=\"{\", fmt_logfmt=\"\", fmt_klog=\"\"}"
+            pipeline_name = "detect_iso"
+
+            stage.regex {
+              expression = "^(?P<fmt_iso>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[^\\s]*\\s+\\[)"
+            }
+          }
+
+          // Parse JSON
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_json=\"{\"}"
+            pipeline_name = "json_parse"
+
+            stage.replace {
+              expression = "\"namespace\"\\s*:"
+              replace    = "\"target_namespace\":"
+            }
+
+            stage.json {
+              expressions = {
+                log_time = "time",
+                log_ts   = "ts",
+                level    = "level",
+                logger   = "logger",
+              }
+            }
+
+            stage.template {
+              source   = "log_time"
+              template = "{{`{{ if ne .log_time \"\" }}{{ .log_time }}{{ else }}{{ .log_ts }}{{ end }}`}}"
+            }
+
+            stage.template {
+              source   = "level"
+              template = "{{`{{ if eq .level \"\" }}info{{ else }}{{ .level }}{{ end }}`}}"
+            }
+            stage.template {
+              source   = "logger"
+              template = "{{`{{ if eq .logger \"\" }}default{{ else }}{{ .logger }}{{ end }}`}}"
+            }
+
+            stage.structured_metadata {
+              values = {
+                level  = "level",
+                logger = "logger",
+              }
+            }
+
+            stage.timestamp {
+              source            = "log_time"
+              format            = "RFC3339Nano"
+              fallback_formats  = ["RFC3339", "2006-01-02T15:04:05Z07:00"]
+              action_on_failure = "skip"
+            }
+          }
+
+          // Parse logfmt
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_logfmt!=\"\"}"
+            pipeline_name = "logfmt_parse"
+
+            stage.logfmt {
+              mapping = {
+                log_time = "ts",
+                log_ts   = "time",
+                level    = "level",
+                message  = "msg",
+              }
+            }
+
+            stage.template {
+              source   = "log_time"
+              template = "{{`{{ if ne .log_time \"\" }}{{ .log_time }}{{ else }}{{ .log_ts }}{{ end }}`}}"
+            }
+
+            stage.template {
+              source   = "level"
+              template = "{{`{{ if eq .level \"\" }}info{{ else if eq .level \"warning\" }}warn{{ else if or (eq .level \"critical\") (eq .level \"crit\") }}fatal{{ else }}{{ .level }}{{ end }}`}}"
+            }
+
+            stage.structured_metadata {
+              values = {
+                level = "level",
+              }
+            }
+
+            stage.output {
+              source = "message"
+            }
+
+            stage.timestamp {
+              source            = "log_time"
+              format            = "RFC3339Nano"
+              fallback_formats  = ["RFC3339"]
+              action_on_failure = "skip"
+            }
+          }
+
+          // Parse klog
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_klog!=\"\"}"
+            pipeline_name = "klog_parse"
+
+            stage.regex {
+              expression = "^(?P<klog_level>[IWEF])(?P<klog_date>\\d{4}) (?P<klog_time>\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\s+\\d+ [\\w\\.]+:\\d+\\] \"?(?P<message>[^\"\\n]+?)\"?\\s*"
+            }
+
+            stage.template {
+              source   = "level"
+              template = "{{`{{ if eq .klog_level \"I\" }}info{{ else if eq .klog_level \"W\" }}warn{{ else if eq .klog_level \"E\" }}error{{ else if eq .klog_level \"F\" }}fatal{{ else }}info{{ end }}`}}"
+            }
+
+            stage.template {
+              source   = "log_time"
+              template = "{{`2026{{ .klog_date }} {{ .klog_time }}`}}"
+            }
+
+            stage.structured_metadata {
+              values = {
+                level = "level",
+              }
+            }
+
+            stage.output {
+              source = "message"
+            }
+
+            stage.timestamp {
+              source            = "log_time"
+              format            = "20060102 15:04:05.000000"
+              action_on_failure = "skip"
+            }
+          }
+
+          // Parse ISO
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_iso!=\"\"}"
+            pipeline_name = "iso_parse"
+
+            stage.regex {
+              expression = "^(?P<log_time>\\d{4}-\\d{2}-\\d{2}T[^\\s]+)\\s+\\[(?P<level>[^\\]]+)\\]\\s+(?P<message>.+)"
+            }
+
+            stage.template {
+              source   = "level"
+              template = "{{`{{ ToLower .level }}`}}"
+            }
+
+            stage.template {
+              source   = "level"
+              template = "{{`{{ if eq .level \"\" }}info{{ else if eq .level \"warning\" }}warn{{ else if or (eq .level \"critical\") (eq .level \"crit\") }}fatal{{ else }}{{ .level }}{{ end }}`}}"
+            }
+
+            stage.structured_metadata {
+              values = {
+                level = "level",
+              }
+            }
+
+            stage.output {
+              source = "message"
+            }
+
+            stage.timestamp {
+              source            = "log_time"
+              format            = "RFC3339Nano"
+              fallback_formats  = ["RFC3339", "2006-01-02T15:04:05.000Z"]
+              action_on_failure = "skip"
+            }
+          }
+
+          // Parse plaintext
+          stage.match {
+            selector      = "{job=\"pod_logs\", fmt_json!=\"{\", fmt_logfmt=\"\", fmt_klog=\"\", fmt_iso=\"\"}"
+            pipeline_name = "plaintext_parse"
+
+            stage.regex {
+              expression = "(?i)(?:^|\\s)(?:level=)?(?P<text_level>fatal|error|warn(?:ing)?|info|debug)(?:\\s|=|$|:)"
+            }
+
+            stage.template {
+              source   = "text_level"
+              template = "{{`{{ ToLower .text_level }}`}}"
+            }
+
+            stage.template {
+              source   = "text_level"
+              template = "{{`{{ if eq .text_level \"\" }}info{{ else if eq .text_level \"warning\" }}warn{{ else if or (eq .text_level \"critical\") (eq .text_level \"crit\") }}fatal{{ else }}{{ .text_level }}{{ end }}`}}"
+            }
+
+            stage.structured_metadata {
+              values = {
+                level = "text_level",
+              }
+            }
+          }
+
+          stage.label_keep {
+            values = [
+              "cluster", "env", "region", "owner",
+              "device", "job", "namespace", "workload",
+            ]
+          }
+
+          forward_to = [loki.write.victoriametrics.receiver]
+        }
+    serviceMonitors:
+      enabled: true
+      content: |
+        // ---------------------
+        // SERVICE MONITORS
+        // ---------------------
+        prometheus.operator.servicemonitors "k8s_services" {
+            forward_to = [prometheus.relabel.servicemonitor_labels.receiver]
+
+            clustering {
+              enabled = true
+            }
+        }
+
+        prometheus.relabel "servicemonitor_labels" {
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+
+          rule {
+            source_labels = ["pod"]
+            regex         = "(.+)"
+            target_label  = "instance"
+          }
+
+          rule {
+            source_labels = ["app_kubernetes_io_name"]
+            regex         = "(.+)"
+            target_label  = "workload"
+          }
+          rule {
+            source_labels = ["workload", "app"]
+            separator     = ";"
+            regex         = ";(.+)"
+            target_label  = "workload"
+            replacement   = "${1}"
+          }
+          rule {
+            source_labels = ["workload", "service"]
+            separator     = ";"
+            regex         = ";(.+)"
+            target_label  = "workload"
+            replacement   = "${1}"
+          }
+
+          rule {
+            target_label = "device"
+            replacement  = "pod"
+          }
+
+          rule {
+            target_label = "job"
+            replacement  = "service_metrics"
+          }
+
+          rule {
+            action = "labeldrop"
+            regex  = "endpoint|pod|service"
+          }
+          rule {
+            action = "labeldrop"
+            regex  = "__meta_.+"
+          }
+        }
+    promReceive:
+      enabled: true
+      content: |
+        prometheus.receive_http "api" {
+          http {
+            listen_address = "0.0.0.0"
+            listen_port = 9001
+          }
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+        }
+    snmpTargets:
+      enabled: false
+      content: ""
+    blackboxTargets:
+      enabled: true
+      content: |
+        {{- $bbx := .Values.configExternal.blackbox | default dict -}}
+        {{- $targets := (index $bbx "targets") | default list -}}
+        {{- $bbxDefaultModule := default "http_2xx" (index $bbx "defaultModule") -}}
+        {{- $bbxDefaultLabels := index $bbx "defaultLabels" | default dict -}}
+        {{- if $targets }}
+
+        // ---------------------
+        // EXTERNAL TARGETS (BLACKBOX)
+        // ---------------------
+        prometheus.exporter.blackbox "targets" {
+          config = {{ required "FATAL: configExternal.blackbox.config must be set!" (index $bbx "config") | quote }}
+
+          {{- range $i, $t := $targets }}
+          target {
+            name    = {{ required "FATAL: configExternal.blackbox.targets[].name is required!" $t.name | quote }}
+            address = {{ required "FATAL: configExternal.blackbox.targets[].address is required!" $t.address | quote }}
+            module  = {{ default $bbxDefaultModule $t.module | quote }}
+            {{- $bbLabels := mergeOverwrite (dict) $bbxDefaultLabels ($t.labels | default dict) }}
+            {{- with $bbLabels }}
+            labels = {
+              {{- range $k, $v := $bbLabels }}
+              {{ $k | quote }} = {{ $v | quote }},
+              {{- end }}
+            }
+            {{- end }}
+          }
+          {{- end }}
+        }
+
+        discovery.relabel "blackbox_targets" {
+          targets = prometheus.exporter.blackbox.targets.targets
+
+          rule {
+            source_labels = ["__param_target"]
+            target_label = "instance"
+          }
+          rule {
+            source_labels = ["name"]
+            target_label  = "target"
+          }
+          rule {
+            action = "labeldrop"
+            regex  = "name"
+          }
+        }
+
+        prometheus.scrape "blackbox" {
+          targets         = discovery.relabel.blackbox_targets.output
+          forward_to      = [prometheus.relabel.blackbox_labels.receiver]
+          scrape_interval = {{ required "FATAL: configExternal.scrapeInterval must be set!" .Values.configExternal.scrapeInterval | quote }}
+
+          clustering {
+            enabled = true
+          }
+        }
+
+        prometheus.relabel "blackbox_labels" {
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+
+          rule {
+            target_label = "device"
+            replacement  = "probe"
+          }
+          rule {
+            target_label = "job"
+            replacement  = "blackbox_metrics"
+          }
+        }
+
+        {{- end }}
+    lokiReceive:
+      enabled: true
+      content: |
+        loki.source.api "api" {
+          http {
+            listen_address = "0.0.0.0"
+            listen_port = 9000
+          }
+          forward_to = [loki.relabel.loki_receive_allowlist.receiver]
+        }
+
+        loki.relabel "loki_receive_allowlist" {
+          forward_to = [loki.process.loki_receive.receiver]
+          rule {
+            action = "labelkeep"
+            regex  = "cluster|env|region|owner|device|job|namespace|workload"
+          }
+          rule {
+            source_labels = ["job"]
+            regex         = "^$"
+            target_label  = "job"
+            replacement   = "loki_receive"
+          }
+        }
+
+        loki.process "loki_receive" {
+          stage.static_labels {
+            values = {
+              cluster = {{ required "FATAL: global.cluster.name must be set!" .Values.global.cluster.name | quote }},
+            }
+          }
+
+          forward_to = [loki.write.victoriametrics.receiver]
+        }
+    syslog:
+      enabled: true
+      content: |
+        loki.source.syslog "rfc5424" {
+          listener {
+            address                 = "0.0.0.0:1525"
+            protocol                = "tcp"
+            syslog_format           = "rfc5424"
+            idle_timeout            = "120s"
+            label_structured_data   = true
+            use_incoming_timestamp  = true
+            rfc5424_allow_empty_msg = true
+            labels = {
+              syslog_rfc = "5424",
+            }
+          }
+          listener {
+            address                 = "0.0.0.0:1525"
+            protocol                = "udp"
+            syslog_format           = "rfc5424"
+            label_structured_data   = true
+            use_incoming_timestamp  = true
+            rfc5424_allow_empty_msg = true
+            labels = {
+              syslog_rfc = "5424",
+            }
+          }
+          relabel_rules = loki.relabel.syslog_meta.rules
+          forward_to    = [loki.process.syslog_labels.receiver]
+        }
+
+        loki.source.syslog "rfc3164" {
+          listener {
+            address                         = "0.0.0.0:1524"
+            protocol                        = "tcp"
+            syslog_format                   = "rfc3164"
+            idle_timeout                    = "120s"
+            use_incoming_timestamp          = true
+            rfc3164_default_to_current_year = true
+            labels = {
+              syslog_rfc = "3164",
+            }
+          }
+          listener {
+            address                         = "0.0.0.0:1524"
+            protocol                        = "udp"
+            syslog_format                   = "rfc3164"
+            use_incoming_timestamp          = true
+            rfc3164_default_to_current_year = true
+            labels = {
+              syslog_rfc = "3164",
+            }
+          }
+          relabel_rules = loki.relabel.syslog_meta.rules
+          forward_to    = [loki.process.syslog_labels.receiver]
+        }
+
+        loki.relabel "syslog_meta" {
+          forward_to = []
+          rule {
+            source_labels = ["__syslog_message_hostname"]
+            target_label  = "hostname"
+          }
+          rule {
+            source_labels = ["__syslog_message_app_name"]
+            target_label  = "app"
+          }
+          rule {
+            source_labels = ["__syslog_message_severity"]
+            target_label  = "severity"
+          }
+          rule {
+            source_labels = ["__syslog_message_facility"]
+            target_label  = "facility"
+          }
+          rule {
+            source_labels = ["__syslog_message_proc_id"]
+            target_label  = "proc_id"
+          }
+          rule {
+            source_labels = ["__syslog_connection_hostname"]
+            target_label  = "conn_hostname"
+          }
+          rule {
+            source_labels = ["__syslog_connection_ip_address"]
+            target_label  = "conn_ip"
+          }
+        }
+
+        loki.process "syslog_labels" {
+          stage.static_labels {
+            values = {
+              job     = "syslog",
+              cluster = {{ required "FATAL: global.cluster.name must be set!" .Values.global.cluster.name | quote }},
+              env     = {{ required "FATAL: global.cluster.environment must be set!" .Values.global.cluster.environment | quote }},
+              owner   = {{ required "FATAL: global.cluster.owner must be set!" .Values.global.cluster.owner | quote }},
+            }
+          }
+          stage.structured_metadata {
+            values = {
+              hostname      = "",
+              app           = "",
+              severity      = "",
+              facility      = "",
+              proc_id       = "",
+              conn_hostname = "",
+              conn_ip       = "",
+            }
+          }
+          stage.label_keep {
+            values = [
+              "cluster", "env", "region", "owner",
+              "device", "job", "namespace", "workload",
+              "syslog_rfc",
+            ]
+          }
+          forward_to = [loki.write.victoriametrics.receiver]
+        }
+    filterMetrics:
+      enabled: true
+      content: |
+        // ---------------------
+        // METRICS FILTERING
+        // ---------------------
+        prometheus.relabel "filter_metrics" {
+          forward_to = [prometheus.remote_write.victoriametrics.receiver]
+          rule {
+            source_labels = ["__name__"]
+            regex         = {{ required "FATAL: configExternal.filterMetricsRegex must be set!" .Values.configExternal.filterMetricsRegex | quote }}
+            action        = "drop"
+          }
+          rule {
+            regex  = "id"
+            action = "labeldrop"
+          }
+          rule {
+            target_label = "cluster"
+            replacement  = {{ required "FATAL: global.cluster.name must be set!" .Values.global.cluster.name | quote }}
+          }
+          rule {
+            target_label = "env"
+            replacement  = {{ required "FATAL: global.cluster.environment must be set!" .Values.global.cluster.environment | quote }}
+          }
+          rule {
+            target_label = "region"
+            replacement  = {{ required "FATAL: global.cluster.region must be set!" .Values.global.cluster.region | quote }}
+          }
+          rule {
+            source_labels = ["owner"]
+            regex         = "^$"
+            target_label  = "owner"
+            replacement   = {{ required "FATAL: global.cluster.owner must be set!" .Values.global.cluster.owner | quote }}
+          }
+        }

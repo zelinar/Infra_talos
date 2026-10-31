@@ -1,0 +1,3 @@
+kube-state-metrics has been deployed.
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}

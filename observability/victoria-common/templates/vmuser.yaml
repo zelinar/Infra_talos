@@ -1,0 +1,45 @@
+{{- $cfg := (index .Values "victoria-common" "vmuser") | default dict -}}
+{{- $vCommon := index .Values "victoria-common" -}}
+{{- if $cfg.enabled -}}
+{{- $namePrefix := $cfg.namePrefix | default "" -}}
+{{- $defaultLabels := $cfg.labels | default dict -}}
+{{- $defaultAnnotations := $cfg.annotations | default dict -}}
+{{- range $i, $u := ($cfg.users | default list) -}}
+{{- $userEnabled := true -}}
+{{- if hasKey $u "enabled" -}}
+{{- $userEnabled = $u.enabled -}}
+{{- end -}}
+{{- if $userEnabled -}}
+{{- $labels := mergeOverwrite (deepCopy $defaultLabels) ($u.labels | default dict) -}}
+{{- $annotations := mergeOverwrite (deepCopy $defaultAnnotations) ($u.annotations | default dict) -}}
+{{- $spec := deepCopy ($u.spec | default dict) -}}
+{{- range $ref := ($spec.targetRefs | default list) -}}
+{{- if and (hasKey $ref "crd") (not (hasKey $ref.crd "namespace")) -}}
+{{- $_ := set $ref.crd "namespace" $vCommon.deploymentNamespace -}}
+{{- end -}}
+{{- end }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMUser
+metadata:
+  name: {{ printf "%s%s" $namePrefix (required "victoria-common.vmuser.users[].name is required" $u.name) }}
+  {{- if $cfg.setNamespace }}
+  namespace: {{ $vCommon.deploymentNamespace | quote }}
+  {{- end }}
+  {{- with $labels }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+{{- if $spec }}
+{{ toYaml $spec | nindent 2 }}
+{{- else }}
+  {}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

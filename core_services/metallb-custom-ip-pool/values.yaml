@@ -1,0 +1,6 @@
+metallb:
+  addressPool:
+    namespace: "metallb-system"
+    poolName: "custom-ip-pool"
+    startIP: "10.10.20.125"
+    endIP: "10.10.20.129"

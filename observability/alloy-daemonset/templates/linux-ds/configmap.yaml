@@ -1,0 +1,11 @@
+{{- $cfg := mergeOverwrite (deepCopy (.Values.configAgentBase | default dict)) (.Values.configLinux | default dict) -}}
+{{- $ctx := dict "Values" .Values "Release" .Release "Chart" .Chart "Capabilities" .Capabilities "Files" .Files "Template" .Template "AlloyConfig" $cfg -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-linux-ds-config
+  labels:
+    {{- include "alloy-daemonsets.labels" . | nindent 4 }}
+data:
+  config.alloy: |
+{{ include "alloy-daemonsets.renderAlloySections" (dict "root" $ctx "config" $cfg) | indent 4 }}

@@ -1,0 +1,6 @@
+domain: "homelab.cloud"
+issuerName: "homelab-ca-issuer"
+caSecretName: "homelab-ca-secret"
+targetNamespaces:
+  - traefik
+  - monitoring

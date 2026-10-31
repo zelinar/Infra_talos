@@ -1,0 +1,64 @@
+{{- $root := . }}
+{{- $cfg  := index .Values "alloy-external" "tcpUdpRoutes" | default dict }}
+{{- if $cfg.enabled }}
+{{- range $name, $entry := $cfg.entries }}
+{{- if ne (default true $entry.enabled) false }}
+{{- $svc  := $entry.service     | default dict }}
+{{- $eps  := $entry.entryPoints | default dict }}
+{{- $tls  := $entry.tls         | default dict }}
+{{- $protocols := $entry.protocols | default (list "tcp" "udp") }}
+{{- if has "tcp" $protocols }}
+{{- if not $eps.tcp }}{{- fail (printf "tcpUdpRoutes.entries.%s.entryPoints.tcp is required when protocols includes tcp" $name) }}{{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: {{ include "grafana-alloy.fullname" $root }}-{{ $name }}-tcp
+  namespace: {{ $svc.namespace | default (include "grafana-alloy.namespace" $root) }}
+  labels:
+    {{- include "grafana-alloy.labels" $root | nindent 4 }}
+spec:
+  ingressClassName: {{ $cfg.ingressClassName | default "traefik" }}
+  entryPoints:
+    {{- range $ep := $eps.tcp }}
+    - {{ $ep }}
+    {{- end }}
+  routes:
+    - match: {{ $entry.match | default "HostSNI(`*`)" }}
+      services:
+        - name: {{ $svc.name | default (include "grafana-alloy.serviceName" $root) }}
+          port: {{ required (printf "tcpUdpRoutes.entries.%s.service.port is required" $name) $svc.port }}
+  {{- if or $tls.passthrough $tls.secretName }}
+  tls:
+    {{- if $tls.passthrough }}
+    passthrough: true
+    {{- end }}
+    {{- if $tls.secretName }}
+    secretName: {{ $tls.secretName }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if has "udp" $protocols }}
+{{- if not $eps.udp }}{{- fail (printf "tcpUdpRoutes.entries.%s.entryPoints.udp is required when protocols includes udp" $name) }}{{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteUDP
+metadata:
+  name: {{ include "grafana-alloy.fullname" $root }}-{{ $name }}-udp
+  namespace: {{ $svc.namespace | default (include "grafana-alloy.namespace" $root) }}
+  labels:
+    {{- include "grafana-alloy.labels" $root | nindent 4 }}
+spec:
+  ingressClassName: {{ $cfg.ingressClassName | default "traefik" }}
+  entryPoints:
+    {{- range $ep := $eps.udp }}
+    - {{ $ep }}
+    {{- end }}
+  routes:
+    - services:
+        - name: {{ $svc.name | default (include "grafana-alloy.serviceName" $root) }}
+          port: {{ required (printf "tcpUdpRoutes.entries.%s.service.port is required" $name) $svc.port }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

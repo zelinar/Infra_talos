@@ -1,0 +1,44 @@
+{{/*
+Traefik Middleware redirects for root "/" -> UI paths
+*/}}
+
+{{- $common := (index .Values "victoria-common") | default dict -}}
+{{- $ing := (get $common "ingress") | default dict -}}
+{{- $redir := (get $ing "redirects") | default dict -}}
+
+{{- if and (get $ing "enabled") (get $redir "enabled") -}}
+{{- $domain := required "victoria-common.ingress.ingressDomain is required for redirects" (get $ing "ingressDomain") -}}
+{{- $permanent := default true (get $redir "permanent") -}}
+{{- $prefix := default "vmauth-redirect-" (get $redir "namePrefix") -}}
+{{- $items := required "victoria-common.ingress.redirects.items is required" (get $redir "items") -}}
+
+{{- range $idx, $item := $items }}
+{{- $nameSuffix := required "redirect item.name is required" (get $item "name") -}}
+{{- $host := required "redirect item.host is required" (get $item "host") -}}
+{{- $tp := required "redirect item.targetPath is required" (get $item "targetPath") -}}
+{{- if not (hasPrefix "/" $tp) -}}
+{{- $tp = printf "/%s" $tp -}}
+{{- end -}}
+
+{{- $fqdn := $host -}}
+{{- if not (contains "." $host) -}}
+{{- $fqdn = printf "%s.%s" $host $domain -}}
+{{- end -}}
+
+{{- $regexHost := regexQuoteMeta $fqdn -}}
+{{- $regex := printf "^https?://%s/?(?:\\?.*)?$" $regexHost -}}
+{{- $replacement := printf "https://%s%s" $fqdn $tp -}}
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ printf "%s%s" $prefix $nameSuffix | trunc 63 | trimSuffix "-" | quote }}
+spec:
+  redirectRegex:
+    regex: {{ $regex | quote }}
+    replacement: {{ $replacement | quote }}
+    permanent: {{ $permanent }}
+{{ end }}
+
+{{- end -}}

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: metallb
+description: MetalLB bare-metal LoadBalancer controller and speaker
+type: application
+version: 1.0.0
+dependencies:
+  - condition: metallb.enabled
+    repository: https://metallb.github.io/metallb
+    name: metallb
+    version: 0.15.2

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: victoria-metrics-operator
+description: Wrapper chart for VictoriaMetrics Operator with Prometheus Operator CRDs
+type: application
+version: 0.1.0
+appVersion: "v0.68.0"
+dependencies:
+  - name: victoria-metrics-operator
+    version: 0.67.2
+    repository: https://victoriametrics.github.io/helm-charts/
+  - name: prometheus-operator-crds
+    version: 32.0.2
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus-operator-crds.enabled

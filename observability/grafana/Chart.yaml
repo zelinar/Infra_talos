@@ -1,0 +1,13 @@
+apiVersion: v2
+name: grafana
+description: Grafana visualization platform with VictoriaMetrics and VictoriaLogs datasources
+type: application
+version: 1.0.0
+appVersion: "12.3.2"
+
+dependencies:
+  - name: grafana
+    alias: grafana
+    version: "10.5.15"
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled

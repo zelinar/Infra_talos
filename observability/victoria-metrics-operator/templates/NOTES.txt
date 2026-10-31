@@ -1,0 +1,3 @@
+VictoriaMetrics Operator has been deployed.
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}

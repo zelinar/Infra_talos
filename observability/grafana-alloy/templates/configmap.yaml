@@ -1,0 +1,11 @@
+{{- $cfg := .Values.configExternal | default dict -}}
+{{- $ctx := dict "Values" .Values "Release" .Release "Chart" .Chart "Capabilities" .Capabilities "Files" .Files "Template" .Template "AlloyConfig" $cfg -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-external-config
+  labels:
+    {{- include "grafana-alloy.labels" . | nindent 4 }}
+data:
+  config.alloy: |
+{{ include "grafana-alloy.renderAlloySections" (dict "root" $ctx "config" $cfg) | indent 4 }}

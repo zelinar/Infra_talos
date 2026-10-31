@@ -1,0 +1,73 @@
+# ==============================================================================
+# Proxmox Connection
+# ==============================================================================
+pm_api_url          = "https://10.10.20.20:8006"
+pm_api_token_id     = "terraform@pve!terraform-token"
+pm_api_token_secret = "00000000-0000-0000-0000-000000000000" # Replace with your actual Proxmox token UUID
+pm_tls_insecure     = true
+
+proxmox_node          = "homelab-server"
+proxmox_iso_datastore = "local"
+proxmox_vm_datastore  = "VM-storage"
+
+# ==============================================================================
+# Talos & Kubernetes Versions
+# ==============================================================================
+talos_version      = "v1.9.4"
+kubernetes_version = "1.32.2"
+cni_provider       = "cilium" # "cilium" or "flannel"
+
+# ==============================================================================
+# Cluster & Networking
+# ==============================================================================
+cluster_name        = "homelab-talos"
+cluster_vip         = "" # Optional HA VIP (e.g. "10.10.20.109") if using multiple control planes
+network_bridge      = "vmbr0"
+network_cidr_prefix = 24
+network_gateway     = "10.10.20.1"
+dns_servers         = ["10.10.20.1", "1.1.1.1", "8.8.8.8"]
+
+pod_subnet     = "10.244.0.0/16"
+service_subnet = "10.96.0.0/12"
+
+# ==============================================================================
+# Cluster Nodes
+# ==============================================================================
+nodes = {
+  "k8s-talos-cp-01" = {
+    role              = "controlplane"
+    ip                = "10.10.20.110"
+    vm_id             = 210
+    cores             = 4
+    memory_mb         = 4096
+    os_disk_size_gb   = 50
+    data_disk_size_gb = 0
+  }
+  "k8s-talos-worker-01" = {
+    role              = "worker"
+    ip                = "10.10.20.111"
+    vm_id             = 211
+    cores             = 4
+    memory_mb         = 8192
+    os_disk_size_gb   = 100
+    data_disk_size_gb = 0
+  }
+  "k8s-talos-worker-02" = {
+    role              = "worker"
+    ip                = "10.10.20.112"
+    vm_id             = 212
+    cores             = 4
+    memory_mb         = 8192
+    os_disk_size_gb   = 100
+    data_disk_size_gb = 0
+  }
+  "k8s-talos-worker-03" = {
+    role              = "worker"
+    ip                = "10.10.20.113"
+    vm_id             = 213
+    cores             = 4
+    memory_mb         = 8192
+    os_disk_size_gb   = 100
+    data_disk_size_gb = 0
+  }
+}

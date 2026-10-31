@@ -1,0 +1,103 @@
+{{- define "victoria-common.np.vmauth" -}}
+{{- $b := .backend -}}
+{{- $name := .name -}}
+{{- $appName := .appName -}}
+{{- $defaultInstance := .defaultInstance -}}
+{{- $defaultPort := .defaultPort -}}
+{{- $vmauthName := .vmauthName -}}
+{{- $ns := .ns -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-from-vmauth" $name | quote }}
+  namespace: {{ $ns | quote }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $appName }}
+      app.kubernetes.io/instance: {{ default $defaultInstance (get $b "instance") | quote }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vmauth
+              app.kubernetes.io/instance: {{ $vmauthName | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ default $defaultPort (get $b "port") }}
+{{- end -}}
+
+{{- define "victoria-common.np.namespace" -}}
+{{- $b := .backend -}}
+{{- $name := .name -}}
+{{- $appName := .appName -}}
+{{- $defaultInstance := .defaultInstance -}}
+{{- $defaultPort := .defaultPort -}}
+{{- $ns := .ns -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-from-namespace" $name | quote }}
+  namespace: {{ $ns | quote }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $appName }}
+      app.kubernetes.io/instance: {{ default $defaultInstance (get $b "instance") | quote }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $ns | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ default $defaultPort (get $b "port") }}
+{{- end -}}
+
+{{- $common := (index .Values "victoria-common") | default dict -}}
+{{- $cfg := (get $common "networkPolicy") | default dict -}}
+{{- if (get $cfg "enabled") -}}
+{{- $vmauth := (get $common "vmauth") | default dict -}}
+{{- $vmauthName := required "victoria-common.vmauth.name is required when networkPolicy.enabled" (get $vmauth "name") -}}
+{{- $deployNS := (get $common "deploymentNamespace") | default $.Release.Namespace -}}
+{{- $backends := (get $cfg "backends") | default dict -}}
+
+{{- $vmagent := (get $backends "vmagent") | default dict -}}
+{{- if (get $vmagent "vmauthIngress") }}
+{{- include "victoria-common.np.vmauth" (dict "backend" $vmagent "name" (default "vmagent-ingress" (get $vmagent "name")) "appName" "vmagent" "defaultInstance" "vmagent" "defaultPort" 8429 "vmauthName" $vmauthName "ns" $deployNS) }}
+{{- end }}
+{{- if (get $vmagent "namespaceIngress") }}
+{{- include "victoria-common.np.namespace" (dict "backend" $vmagent "name" (default "vmagent-ingress" (get $vmagent "name")) "appName" "vmagent" "defaultInstance" "vmagent" "defaultPort" 8429 "ns" $deployNS) }}
+{{- end }}
+
+{{- $vlagent := (get $backends "vlagent") | default dict -}}
+{{- if (get $vlagent "vmauthIngress") }}
+{{- include "victoria-common.np.vmauth" (dict "backend" $vlagent "name" (default "vlagent-ingress" (get $vlagent "name")) "appName" "vlagent" "defaultInstance" "vlagent" "defaultPort" 9429 "vmauthName" $vmauthName "ns" $deployNS) }}
+{{- end }}
+{{- if (get $vlagent "namespaceIngress") }}
+{{- include "victoria-common.np.namespace" (dict "backend" $vlagent "name" (default "vlagent-ingress" (get $vlagent "name")) "appName" "vlagent" "defaultInstance" "vlagent" "defaultPort" 9429 "ns" $deployNS) }}
+{{- end }}
+
+{{- $vminsert := (get $backends "vminsert") | default dict -}}
+{{- if (get $vminsert "vmauthIngress") }}
+{{- include "victoria-common.np.vmauth" (dict "backend" $vminsert "name" (default "vminsert-ingress" (get $vminsert "name")) "appName" "vminsert" "defaultInstance" "vmcluster" "defaultPort" 8480 "vmauthName" $vmauthName "ns" $deployNS) }}
+{{- end }}
+{{- if (get $vminsert "namespaceIngress") }}
+{{- include "victoria-common.np.namespace" (dict "backend" $vminsert "name" (default "vminsert-ingress" (get $vminsert "name")) "appName" "vminsert" "defaultInstance" "vmcluster" "defaultPort" 8480 "ns" $deployNS) }}
+{{- end }}
+
+{{- $vlinsert := (get $backends "vlinsert") | default dict -}}
+{{- if (get $vlinsert "vmauthIngress") }}
+{{- include "victoria-common.np.vmauth" (dict "backend" $vlinsert "name" (default "vlinsert-ingress" (get $vlinsert "name")) "appName" "vlinsert" "defaultInstance" "vlcluster" "defaultPort" 9481 "vmauthName" $vmauthName "ns" $deployNS) }}
+{{- end }}
+{{- if (get $vlinsert "namespaceIngress") }}
+{{- include "victoria-common.np.namespace" (dict "backend" $vlinsert "name" (default "vlinsert-ingress" (get $vlinsert "name")) "appName" "vlinsert" "defaultInstance" "vlcluster" "defaultPort" 9481 "ns" $deployNS) }}
+{{- end }}
+
+{{- end }}

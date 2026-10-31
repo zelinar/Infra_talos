@@ -1,0 +1,30 @@
+{{- $cfg := (index .Values "victoria-common" "vmrule") | default dict -}}
+{{- if $cfg.enabled -}}
+{{- $namePrefix := $cfg.namePrefix | default "" -}}
+{{- range $i, $c := ($cfg.rules | default list) -}}
+{{- if $c.enabled -}}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: {{ printf "%s%s" $namePrefix (required "victoria-common.vmrule.rules[].name is required" $c.name) }}
+  {{- if $cfg.setNamespace }}
+  namespace: {{ $.Release.Namespace }}
+  {{- end }}
+  {{- with ($cfg.annotations | default dict) }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with ($cfg.labels | default dict) }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+{{- if $c.spec }}
+{{ toYaml $c.spec | nindent 2 }}
+{{- else }}
+  groups: []
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,445 @@
+victoria-common:
+  deploymentNamespace: monitoring
+
+  # Built-in Kubernetes Secrets for Homelab (used when ExternalSecrets / Vault is not deployed).
+  # Provides the exact same token secrets used by Alloy -> VMAuth -> VMAgent/VLAgent -> VMAuth -> VMCluster/VLCluster.
+  staticSecrets:
+    enabled: true
+    alloyActiveToken: "homelab-alloy-collect-token-active"
+    victoriaActiveToken: "homelab-victoria-ingest-token-active"
+
+  # Vault / ExternalSecrets integration (enable if external-secrets + Vault are deployed)
+  credentialsSecret:
+    enabled: false
+    secretStoreName: vault-platform-kv
+    secretStoreKind: ClusterSecretStore
+    remoteKeyPrefix: "monitoring/homelab/victoria/internal_auth"
+    refreshInterval: "10m"
+    annotations: {}
+    items: []
+    extraItems: []
+
+  ingress:
+    enabled: true
+    ingressDomain: "homelab.cloud"
+    className: traefik
+    setNamespace: false
+    tlsSecretName: "wildcard-homelab-secret"
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: "monitoring-vmauth-redirect-vm-vmui@kubernetescrd,monitoring-vmauth-redirect-vl-vmui@kubernetescrd"
+    name: vmauth-lb
+    serviceName: vmauth-lb
+    servicePort: 8427
+    hosts:
+      - vm
+      - vl
+    paths:
+      - path: /
+        pathType: Prefix
+    redirects:
+      enabled: true
+      permanent: true
+      namePrefix: vmauth-redirect-
+      items:
+        - name: vm-vmui
+          host: vm
+          targetPath: /select/0/vmui/
+        - name: vl-vmui
+          host: vl
+          targetPath: /select/vmui/
+
+  vmauth:
+    enabled: true
+    name: lb
+    setNamespace: false
+    annotations: {}
+    replicaCount: 1
+    overrideVMinsertPath: true
+    overrideVLinsertPath: true
+    selectAllByDefault: false
+    userSelector:
+      matchLabels:
+        vmauth: internal
+    extraArgs:
+      retryStatusCodes: "429,500,502,503,504"
+      maxIdleConnsPerBackend: "100"
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8427
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      failureThreshold: 3
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumes:
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 2Gi
+    volumeMounts:
+      - name: tmp-storage
+        mountPath: /tmp
+
+    unauthorizedUserAccessSpec:
+      discover_backend_ips: true
+      dump_request_on_errors: true
+      load_balancing_policy: "least_loaded"
+      targetRefs:
+        # ---- VictoriaMetrics SELECT on vm.<domain> ----
+        - hosts: ["vm"]
+          paths:
+            - "/select/0/.*"
+            - "/api/v1/.*"
+            - "/prometheus/.*"
+            - "/vmui/.*"
+            - "/vmui"
+          discover_backend_ips: true
+          crd:
+            kind: "VMCluster/vmselect"
+            name: "vmcluster"
+
+        # ---- VMAlert on vm.<domain> - required for VMUI Rules tab ----
+        - componentRef: vmalert
+          hosts: ["vm"]
+          paths: ["/vmalert/.*"]
+          discover_backend_ips: true
+          crd:
+            kind: "VMAlert"
+            name: "vmalert"
+
+        # ---- VMAlertmanager Alert Receiver on vm.<ingressDomain> ----
+        - componentRef: vmalertmanager
+          hosts: ["vm"]
+          paths:
+            - "/api/v2/alerts.*"
+          discover_backend_ips: true
+          crd:
+            kind: "VMAlertmanager"
+            name: "vmalertmanager"
+
+        # ---- VMAlertmanager UI Route on vm.<ingressDomain> ----
+        - componentRef: vmalertmanager
+          hosts: ["vm"]
+          paths:
+            - "/vmalertmanager/.*"
+            - "/vmalertmanager"
+          drop_src_path_prefix_parts: 1
+          discover_backend_ips: true
+          crd:
+            kind: "VMAlertmanager"
+            name: "vmalertmanager"
+
+        # Host-only fallback for vm.<domain>
+        - hosts: ["vm"]
+          discover_backend_ips: true
+          crd:
+            kind: "VMCluster/vmselect"
+            name: "vmcluster"
+
+        # ---- VictoriaLogs SELECT on vl.<domain> ----
+        - hosts: ["vl"]
+          paths:
+            - "/select/.*"
+            - "/api/v1/.*"
+            - "/vmui/.*"
+            - "/vmui"
+          discover_backend_ips: true
+          crd:
+            kind: "VLCluster/vlselect"
+            name: "vlcluster"
+
+        # Host-only fallback for vl.<domain>
+        - hosts: ["vl"]
+          discover_backend_ips: true
+          crd:
+            kind: "VLCluster/vlselect"
+            name: "vlcluster"
+
+  vmuser:
+    enabled: true
+    setNamespace: true
+    namePrefix: ""
+    labels:
+      vmauth: internal
+    annotations: {}
+    users:
+      # Collect layer: Alloy -> VMAuth -> VMAgent / VLAgent
+      - name: collect-active
+        spec:
+          name: "collect-active"
+          bearerTokenSecret:
+            name: victoria-internal-auth-tokens
+            key: collect_active_token
+          targetRefs:
+            - paths: ["/insert/0/.*"]
+              discover_backend_ips: true
+              crd:
+                kind: "VMAgent"
+                name: "vmagent"
+            - paths: ["/insert/.*"]
+              discover_backend_ips: true
+              crd:
+                kind: "VLAgent"
+                name: "vlagent"
+
+      # Ingest layer: VMAgent / VLAgent / VMAlert -> VMAuth -> vminsert / vlinsert
+      - name: ingest-active
+        spec:
+          name: "ingest-active"
+          bearerTokenSecret:
+            name: victoria-internal-auth-tokens
+            key: ingest_active_token
+          targetRefs:
+            - paths: ["/insert/0/.*"]
+              discover_backend_ips: true
+              crd:
+                kind: "VMCluster/vminsert"
+                name: "vmcluster"
+            - paths: ["/insert/.*"]
+              discover_backend_ips: true
+              crd:
+                kind: "VLCluster/vlinsert"
+                name: "vlcluster"
+
+  vmagent:
+    enabled: true
+    name: vmagent
+    setNamespace: false
+    annotations: {}
+    labels: {}
+    spec:
+      statefulMode: true
+      replicaCount: 1
+      ingestOnlyMode: true
+      daemonSetMode: false
+      disableSelfServiceScrape: true
+      selectAllByDefault: false
+      secrets:
+        - victoria-active-token
+      extraArgs:
+        remoteWrite.retryMinInterval: "1s"
+        remoteWrite.retryMaxInterval: "60s"
+        remoteWrite.flushInterval: "1s"
+        remoteWrite.bearerTokenFile: "/etc/vm/secrets/victoria-active-token/token"
+      securityContext:
+        readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp-storage
+          emptyDir:
+            sizeLimit: 2Gi
+      volumeMounts:
+        - name: tmp-storage
+          mountPath: /tmp
+      statefulStorage:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: longhorn
+            resources:
+              requests:
+                storage: 5Gi
+      remoteWriteSettings:
+        useMultiTenantMode: true
+        tmpDataPath: /vmagent_pq/vmagent-remotewrite-data
+        maxDiskUsagePerURL: 2GB
+        queues: 4
+        flushInterval: "1s"
+      remoteWrite:
+        - url: "http://vmauth-lb.monitoring.svc:8427/insert/0/prometheus/api/v1/write"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
+
+  vlagent:
+    enabled: true
+    name: vlagent
+    setNamespace: false
+    annotations: {}
+    labels: {}
+    spec:
+      disableSelfServiceScrape: true
+      replicaCount: 1
+      extraArgs:
+        remoteWrite.retryMinInterval: "1s"
+        remoteWrite.retryMaxTime: "60s"
+        remoteWrite.flushInterval: "1s"
+        remoteWrite.bearerTokenFile: "/etc/vm-auth/token"
+      securityContext:
+        readOnlyRootFilesystem: true
+      volumes:
+        - name: vm-auth
+          secret:
+            secretName: victoria-active-token
+            defaultMode: 0400
+        - name: tmp-storage
+          emptyDir:
+            sizeLimit: 2Gi
+      volumeMounts:
+        - name: vm-auth
+          mountPath: /etc/vm-auth
+          readOnly: true
+        - name: tmp-storage
+          mountPath: /tmp
+      storage:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: longhorn
+            resources:
+              requests:
+                storage: 5Gi
+      remoteWriteSettings:
+        tmpDataPath: /vlagent-data/vlagent-remotewrite-data
+        maxDiskUsagePerURL: "2GB"
+        queues: 4
+        flushInterval: "1s"
+      remoteWrite:
+        - url: "http://vmauth-lb.monitoring.svc:8427/insert/native"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
+
+  vmalert:
+    enabled: true
+    name: vmalert
+    setNamespace: false
+    annotations: {}
+    labels: {}
+    spec:
+      replicaCount: 1
+      disableSelfServiceScrape: true
+      evaluationInterval: "1m"
+      extraArgs:
+        http.pathPrefix: "/vmalert"
+      datasource:
+        url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
+      notifiers:
+        - selector:
+            labelSelector:
+              matchLabels:
+                usage: dedicated
+      remoteWrite:
+        url: "http://vmauth-lb.monitoring.svc:8427/insert/0/prometheus"
+        bearerTokenSecret:
+          name: victoria-active-token
+          key: token
+      remoteRead:
+        url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
+        lookBack: "1h"
+      selectAllByDefault: true
+      ruleNamespaceSelector: {}
+      securityContext:
+        readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp-storage
+          emptyDir:
+            sizeLimit: 2Gi
+      volumeMounts:
+        - name: tmp-storage
+          mountPath: /tmp
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+
+  vmalertmanager:
+    enabled: true
+    name: vmalertmanager
+    setNamespace: false
+    annotations: {}
+    extraLabels:
+      usage: dedicated
+    spec:
+      configSelector: {}
+      configNamespaceSelector: {}
+      disableNamespaceMatcher: true
+      replicaCount: 1
+      securityContext:
+        readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp-storage
+          emptyDir:
+            sizeLimit: 2Gi
+      volumeMounts:
+        - name: tmp-storage
+          mountPath: /tmp
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+
+  vmalertmanagerconfig:
+    enabled: false
+    setNamespace: false
+    namePrefix: ""
+    annotations: {}
+    labels: {}
+    configs: []
+
+  vmrule:
+    enabled: true
+    setNamespace: false
+    namePrefix: "homelab-"
+    annotations: {}
+    labels: {}
+    rules:
+      - name: kubernetes-alerts
+        enabled: true
+        spec:
+          groups:
+            - name: node.rules
+              interval: "1m"
+              rules:
+                - alert: NodeHighMemoryUsage
+                  expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+                  for: "5m"
+                  labels:
+                    severity: warning
+                  annotations:
+                    summary: "High memory usage on {{ $labels.instance }}"
+                    description: "Memory usage on node {{ $labels.instance }} is above 85% for 5m."
+                - alert: NodeFilesystemAlmostOutOfSpace
+                  expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+                  for: "5m"
+                  labels:
+                    severity: warning
+                  annotations:
+                    summary: "Filesystem almost out of space on {{ $labels.instance }}"
+                    description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has less than 15% free space."
+
+  networkPolicy:
+    enabled: false
+    backends:
+      vmagent:
+        vmauthIngress: false
+        namespaceIngress: false
+      vlagent:
+        vmauthIngress: false
+        namespaceIngress: false
+      vminsert:
+        vmauthIngress: false
+        namespaceIngress: false
+      vlinsert:
+        vmauthIngress: false
+        namespaceIngress: false

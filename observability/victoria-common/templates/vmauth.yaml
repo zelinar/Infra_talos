@@ -1,0 +1,183 @@
+{{- /*
+Shared VMAuth gateway
+*/ -}}
+
+{{- $common := (index .Values "victoria-common") | default dict -}}
+{{- $deployNS := (get $common "deploymentNamespace") | default "" -}}
+{{- $ing := (get $common "ingress") | default dict -}}
+{{- $v := (get $common "vmauth") | default dict -}}
+
+{{- if (get $v "enabled") -}}
+{{- $name := required "victoria-common.vmauth.name is required" (get $v "name") -}}
+{{- $domain := required "victoria-common.ingress.ingressDomain is required" (get $ing "ingressDomain") -}}
+{{- $unauth := get $v "unauthorizedUserAccessSpec" -}}
+{{- $defaultBackendNS := default .Release.Namespace $deployNS -}}
+
+{{- $targetRefsOut := list -}}
+{{- if $unauth -}}
+{{- $targetRefsIn := get $unauth "targetRefs" | default list -}}
+{{- range $tr := $targetRefsIn -}}
+{{- $compRef := get $tr "componentRef" -}}
+{{- $insertOverride := get $tr "insertOverride" -}}
+{{- $skip := false -}}
+
+{{- if $compRef -}}
+{{- $comp := get $common $compRef | default dict -}}
+{{- if not (get $comp "enabled") -}}
+{{- $skip = true -}}
+{{- end -}}
+{{- end -}}
+
+{{- if $insertOverride -}}
+{{- if eq $insertOverride "vm" -}}
+{{- if not (get $v "overrideVMinsertPath") -}}
+{{- $skip = true -}}
+{{- end -}}
+{{- else if eq $insertOverride "vl" -}}
+{{- if not (get $v "overrideVLinsertPath") -}}
+{{- $skip = true -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- if not $skip -}}
+{{- $item := deepCopy $tr -}}
+{{- $_ := unset $item "componentRef" -}}
+{{- $_ := unset $item "insertOverride" -}}
+
+{{- $hostsIn := get $tr "hosts" -}}
+{{- if $hostsIn -}}
+{{- $hostsOut := list -}}
+{{- range $h := $hostsIn -}}
+{{- if contains "." $h -}}
+{{- $hostsOut = append $hostsOut $h -}}
+{{- else -}}
+{{- $hostsOut = append $hostsOut (printf "%s.%s" $h $domain) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $item "hosts" $hostsOut -}}
+{{- else -}}
+{{- $_ := unset $item "hosts" -}}
+{{- end -}}
+
+{{- $crd := get $item "crd" -}}
+{{- if $crd -}}
+{{- $ns := get $crd "namespace" | default $defaultBackendNS -}}
+{{- $_ := set $crd "namespace" $ns -}}
+{{- $_ := set $item "crd" $crd -}}
+{{- end -}}
+
+{{- $targetRefsOut = append $targetRefsOut $item -}}
+{{- end -}}
+
+{{- end -}}
+{{- end -}}
+
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAuth
+metadata:
+  name: {{ $name | quote }}
+{{ if (get $v "setNamespace") }}
+  namespace: {{ $defaultBackendNS | quote }}
+{{ end }}
+{{ with (get $v "annotations") }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+{{ with (get $v "labels") }}
+  labels:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+spec:
+  replicaCount: {{ default 1 (get $v "replicaCount") }}
+
+{{ with (get $v "imagePullSecrets") }}
+  imagePullSecrets:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "hpa") }}
+  hpa:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+  selectAllByDefault: {{ default false (get $v "selectAllByDefault") }}
+
+{{ with (get $v "userSelector") }}
+  userSelector:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "userNamespaceSelector") }}
+  userNamespaceSelector:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "resources") }}
+  resources:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "extraArgs") }}
+  extraArgs:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "readinessProbe") }}
+  readinessProbe:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "affinity") }}
+  affinity:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "tolerations") }}
+  tolerations:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "securityContext") }}
+  securityContext:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "volumes") }}
+  volumes:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "volumeMounts") }}
+  volumeMounts:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{ with (get $v "topologySpreadConstraints") }}
+  topologySpreadConstraints:
+{{ toYaml . | nindent 4 }}
+{{ end }}
+
+{{- if $unauth }}
+  unauthorizedUserAccessSpec:
+    discover_backend_ips: {{ default true (get $unauth "discover_backend_ips") }}
+{{ with (get $unauth "dump_request_on_errors") }}
+    dump_request_on_errors: {{ . }}
+{{ end }}
+{{ with (get $unauth "load_balancing_policy") }}
+    load_balancing_policy: {{ . }}
+{{ end }}
+
+{{ with (get $unauth "default_url") }}
+    default_url:
+{{ toYaml . | nindent 6 }}
+{{ end }}
+
+{{ if $targetRefsOut }}
+    targetRefs:
+{{ toYaml $targetRefsOut | nindent 6 }}
+{{ end }}
+{{- end }}
+
+{{- end }}
