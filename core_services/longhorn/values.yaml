@@ -1,9 +1,13 @@
 longhorn:
   longhornUI:
     replicas: 1
+  persistence:
+    defaultClassReplicaCount: 2
   defaultSettings:
     defaultDataPath: /var/lib/longhorn
     defaultDataLocality: best-effort
-    defaultReplicaCount: 3
+    defaultReplicaCount: 2
+    storageOverProvisioningPercentage: 200
+    storageMinimalAvailablePercentage: 15
   preUpgradeChecker:
     jobEnabled: false

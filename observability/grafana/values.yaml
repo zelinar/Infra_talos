@@ -8,6 +8,8 @@ grafana:
     tag: "12.3.2"
 
   replicas: 1
+  adminUser: admin
+  adminPassword: admin
   deploymentStrategy:
     type: RollingUpdate
 
@@ -58,7 +60,6 @@ grafana:
       datasources:
         # Prometheus-compatible query endpoint (VMSelect)
         - name: Prometheus
-          uid: prometheus
           type: prometheus
           access: proxy
           url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
@@ -67,7 +68,6 @@ grafana:
 
         # Native VictoriaMetrics datasource plugin (VMSelect)
         - name: VictoriaMetrics
-          uid: victoriametrics
           type: victoriametrics-metrics-datasource
           access: proxy
           url: "http://vmselect-vmcluster.monitoring.svc:8481/select/0/prometheus"
@@ -76,7 +76,6 @@ grafana:
 
         # VictoriaLogs datasource plugin (VLSelect)
         - name: VictoriaLogs
-          uid: victorialogs
           type: victoriametrics-logs-datasource
           access: proxy
           url: "http://vlselect-vlcluster.monitoring.svc:9471"

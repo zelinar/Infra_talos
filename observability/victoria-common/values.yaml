@@ -414,6 +414,7 @@ victoria-common:
                 - alert: NodeHighMemoryUsage
                   expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
                   for: "5m"
+                  record: ""
                   labels:
                     severity: warning
                   annotations:
@@ -422,6 +423,7 @@ victoria-common:
                 - alert: NodeFilesystemAlmostOutOfSpace
                   expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
                   for: "5m"
+                  record: ""
                   labels:
                     severity: warning
                   annotations:
