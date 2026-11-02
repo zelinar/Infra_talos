@@ -1,0 +1,17 @@
+{{- if and $.Values.vault.ingress $.Values.vault.ingress.tlsSecretName }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-homelab-crt
+  namespace: {{ $.Release.Namespace }}
+spec:
+  isCA: false
+  secretName: {{ $.Values.vault.ingress.tlsSecretName }}
+  issuerRef:
+    name: {{ $.Values.vault.ingress.issuerName | default "homelab-ca-issuer" }}
+    kind: ClusterIssuer
+  commonName: "*.homelab.cloud"
+  dnsNames:
+    - "*.homelab.cloud"
+    - "homelab.cloud"
+{{- end }}
