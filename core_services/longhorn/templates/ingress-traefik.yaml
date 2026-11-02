@@ -7,9 +7,9 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - longhorn-mgmt.homelab.cloud
+        - longhorn.homelab.cloud
   rules:
-    - host: longhorn-mgmt.homelab.cloud
+    - host: longhorn.homelab.cloud
       http:
         paths:
           - path: /

@@ -187,7 +187,7 @@ variable "argocd_chart_version" {
 variable "argocd_domain" {
   description = "FQDN for ArgoCD UI Ingress"
   type        = string
-  default     = "argocd-mgmt.homelab.cloud"
+  default     = "argocd.homelab.cloud"
 }
 
 variable "argocd_ha_enabled" {
