@@ -51,8 +51,11 @@ vault:
   # Ingress configuration exposed via Traefik
   ingress:
     className: traefik
+    domain: "internal.cloud"
+    issuerName: "homelab-ca-issuer"
+    certificateName: "wildcard-homelab-crt"
     hosts:
-      - vault.homelab.cloud
+      - vault.internal.cloud
     tlsSecretName: wildcard-homelab-secret
 
   # Resources for vault container
@@ -115,3 +118,16 @@ vault:
         data:
           admin-user: "admin"
           admin-password: "admin"
+    - type: kv
+      path: homelab/data/workloads/postgres
+      data:
+        data:
+          username: "appuser"
+          password: "homelab-postgres-password"
+    - type: kv
+      path: homelab/data/storage/longhorn-s3
+      data:
+        data:
+          access_key_id: ""
+          secret_access_key: ""
+          endpoint: ""

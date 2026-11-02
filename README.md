@@ -17,7 +17,7 @@ flowchart TB
     end
 
     subgraph L2["Layer 2: GitOps Control Plane (ArgoCD)"]
-        ARGO["ArgoCD (argocd namespace)\nhttps://argocd-mgmt.homelab.cloud"]
+        ARGO["ArgoCD (argocd namespace)\nhttps://argocd.internal.cloud"]
         AS_CORE["ApplicationSet: core-services\n(Watches core_services/* — Waves 1–3)"]
         AS_OBS["ApplicationSet: observability\n(Watches observability/* — Waves 4–6)"]
         CIL --> ARGO
@@ -26,7 +26,7 @@ flowchart TB
     end
 
     subgraph L3["Layer 3: Core Cluster Services (Waves 1–3)"]
-        CM["cert-manager + trust-manager + homelab-tls\n(Homelab Root CA -> *.homelab.cloud TLS)"]
+        CM["cert-manager + trust-manager + homelab-tls\n(Homelab Root CA -> *.internal.cloud TLS)"]
         MLB["MetalLB (L2 Pool: 10.10.20.125–129)"]
         TR["Traefik Ingress Controller (10.10.20.125)"]
         LH["Longhorn Distributed Block Storage\n(Default StorageClass: longhorn)"]
@@ -50,7 +50,7 @@ flowchart TB
 
     VLT -. "Syncs ExternalSecrets\n(Auth Tokens & Admin Credentials)" .-> VMA & GRAF
     LH -. "ReadWriteOnce PVCs" .-> VLT & VMC & VLC & VMA & GRAF
-    TR -. "HTTPS Ingress (*.homelab.cloud)" .-> ARGO & LH & VLT & VMA & ALLOY & GRAF
+    TR -. "HTTPS Ingress (*.internal.cloud)" .-> ARGO & LH & VLT & VMA & ALLOY & GRAF
 ```
 
 ---
@@ -64,17 +64,17 @@ flowchart TB
 * **CNI Layer (`cni.tf`)**: Installs **Cilium** via Helm with `kube-proxy` replacement, Talos KubePrism (`localhost:7445`) API server load balancing, and Hubble UI.
 
 ### 2. Layer 2: ArgoCD Bootstrap & ApplicationSets (`terraform/argocd.tf` & `gitops/`)
-* **ArgoCD Helm Deployment (`argocd.tf`)**: Deploys ArgoCD into the `argocd` namespace once Cilium is ready, exposes it via Traefik (`https://argocd-mgmt.homelab.cloud`), and exports the initial admin password via Terraform outputs.
+* **ArgoCD Helm Deployment (`argocd.tf`)**: Deploys ArgoCD into the `argocd` namespace once Cilium is ready, exposes it via Traefik (`https://argocd.internal.cloud`), and exports the initial admin password via Terraform outputs.
 * **AppProjects (`gitops/projects/app-projects.yaml.tftpl`)**: Creates `core-services`, `observability`, and `workloads` projects at sync-wave `-10`.
 * **ApplicationSets (`gitops/appsets/`)**: Uses Git directory generators (`core_services/*` and `observability/*`) to automatically discover and deploy charts in ordered Sync Waves (`Wave 1` through `Wave 6`) while applying Talos `PodSecurity` (`privileged`) namespace labels.
 
 ### 3. Layer 3: Core Cluster Services (`core_services/`)
 | Sync Wave | Component | Namespace | Role & Wiring |
 | :---: | :--- | :--- | :--- |
-| **Wave 1** | `cert-manager` (`v1.20.1`) | `cert-manager` | Issues certificates and seeds the `homelab-root-ca-secret` Root CA. |
+| **Wave 1** | `cert-manager` (`v1.20.1`) | `cert-manager` | Issues certificates and seeds the `homelab-ca-secret` Root CA. |
 | **Wave 1** | `metallb` (`0.15.2`) | `metallb-system` | Bare-metal LoadBalancer controller & L2 ARP speaker. |
 | **Wave 1** | `metrics-server` (`3.13.0`) | `kube-system` | Kubernetes resource metrics API (`kubectl top`). |
-| **Wave 2** | `homelab-tls` (`0.1.0`) | `cert-manager` | Creates `ClusterIssuer/homelab-ca-issuer` and wildcard certificates (`wildcard-homelab-secret` for `*.homelab.cloud`) across namespaces (`traefik`, `monitoring`, `vault`). |
+| **Wave 2** | `homelab-tls` (`0.1.0`) | `cert-manager` | Creates `ClusterIssuer/homelab-ca-issuer` and wildcard certificates (`wildcard-homelab-secret` for `*.internal.cloud`) across namespaces (`traefik`, `monitoring`, `vault`). |
 | **Wave 2** | `trust-manager` (`v0.22.0`) | `cert-manager` | Distributes the Homelab Root CA trust bundle (`Bundle/homelab-ca-bundle`) across namespaces. |
 | **Wave 2** | `metallb-custom-ip-pool` | `metallb-system` | Provisions `IPAddressPool` (`10.10.20.125-10.10.20.129`) and `L2Advertisement`. |
 | **Wave 2** | `longhorn` (`1.11.1`) | `longhorn-system` | Distributed block storage (`StorageClass: longhorn`, 2 replicas, `/var/lib/longhorn`). |
@@ -94,6 +94,28 @@ flowchart TB
 | **Wave 6** | `grafana-alloy` (`1.6.2`) | `monitoring` | Clustered `alloy-external` Deployment collecting Pod logs, `ServiceMonitor`/`PodMonitor` targets, Blackbox probes, and external push receivers (`alloy-logs` / `alloy-metrics`). |
 | **Wave 6** | `alloy-daemonset` (`1.6.2`) | `monitoring` | Node-level `alloy-linux-ds` DaemonSet scraping host Unix metrics (`node_exporter` equivalent) and Kubelet/cAdvisor metrics. |
 | **Wave 6** | `grafana` (`12.3.2`) | `monitoring` | Grafana UI (`10Gi` Longhorn PVC) with `victoriametrics-metrics-datasource` and `victoriametrics-logs-datasource` plugins, pre-provisioned datasources, and admin credentials synced from `vault-homelab`. |
+
+### 5. Layer 5: Production Workloads & HA Databases (`workloads/` — Optional Wave 7)
+| Sync Wave | Component | Namespace | Role & Wiring |
+| :---: | :--- | :--- | :--- |
+| **Wave 7** | `postgres-cluster` (`0.1.0`) | `postgres-cluster` | 2-node HA **CloudNativePG** PostgreSQL 16 cluster (`StorageClass: longhorn`), database credentials synced from Vault (`homelab/workloads/postgres`) via `ExternalSecret`, `PodMonitor` scraped by Grafana Alloy, and optional S3 Barman continuous WAL archiving & daily scheduled backups. |
+
+---
+
+## Single-File Platform Customization (`terraform.tfvars`)
+
+The entire stack (Layers 1–5) is parameterized end-to-end from **`terraform/terraform.tfvars`**. Terraform dynamically injects your domain, IP pools, TLS mode, and initial Vault secrets into the ArgoCD `ApplicationSet` Helm overrides—no manual editing of `values.yaml` files across the repository is required:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `base_domain` | `"internal.cloud"` | Base domain propagated to all Ingresses and wildcard TLS certificates (`*.<base_domain>`). |
+| `metallb_ip_pool_start` | `"10.10.20.125"` | First IPv4 address in the MetalLB L2 LoadBalancer pool. |
+| `metallb_ip_pool_end` | `"10.10.20.129"` | Last IPv4 address in the MetalLB L2 LoadBalancer pool. |
+| `traefik_lb_ip` | `""` *(uses start IP)* | Static LoadBalancer IP bound to the Traefik Ingress Controller. |
+| `tls_mode` | `"internal-ca"` | `"internal-ca"` (cluster Root CA) or `"letsencrypt"` (ACME DNS-01 wildcard via Cloudflare). |
+| `acme_cloudflare_api_token` | `""` | Cloudflare API token (`Zone:DNS:Edit`) when `tls_mode = "letsencrypt"`. |
+| `longhorn_s3_backup_enabled` | `false` | Enables Longhorn S3 backup target, Vault S3 secret sync, and daily `RecurringJob` volume backups. |
+| `enable_workloads_appset` | `false` | Deploys Wave 7 workloads (`workloads/postgres-cluster` HA PostgreSQL cluster). |
 
 ---
 
@@ -143,7 +165,7 @@ flowchart LR
   * `homelab/data/observability/grafana` (`remoteRef.key: observability/grafana`):
     * `admin-user` & `admin-password`: Synced into `Secret/grafana-admin-secret` and mounted by Grafana.
 * **Adding New Secrets to Any Namespace**:
-  1. Write a secret into the `homelab/` space in Vault UI (`https://vault.homelab.cloud`) or add it under `vault.startupSecrets` in `core_services/vault/values.yaml`.
+  1. Write a secret into the `homelab/` space in Vault UI (`https://vault.internal.cloud`) or add it under `vault.startupSecrets` in `core_services/vault/values.yaml`.
   2. Create an `ExternalSecret` (`apiVersion: external-secrets.io/v1`) referencing `secretStoreRef.name: vault-homelab` (`kind: ClusterSecretStore`).
 
 ---
@@ -198,22 +220,23 @@ flowchart LR
 
 ---
 
-### 3. TLS & Ingress Routing (`*.homelab.cloud`)
+### 3. TLS & Ingress Routing (`*.internal.cloud`)
 
 1. **MetalLB** assigns `10.10.20.125` from `10.10.20.125-10.10.20.129` to the `traefik` `LoadBalancer` Service.
-2. **`cert-manager`** + **`homelab-tls`** sign a wildcard TLS certificate (`*.homelab.cloud` + `homelab.cloud`) using the Homelab Root CA (`ClusterIssuer/homelab-ca-issuer`) and store it as `Secret/wildcard-homelab-secret` in `traefik`, `monitoring`, and `vault`.
+2. **`cert-manager`** + **`homelab-tls`** sign a wildcard TLS certificate (`*.internal.cloud` + `internal.cloud`) using the Homelab Root CA (`ClusterIssuer/homelab-ca-issuer`) and store it as `Secret/wildcard-homelab-secret` in `traefik`, `monitoring`, and `vault`.
 3. **Traefik** uses `wildcard-homelab-secret` as its default `TLSStore` certificate and automatically redirects HTTP (`:80`) to HTTPS (`:443`).
+4. **Browser Trust**: Terraform automatically exports the Root CA certificate to `terraform/generated/homelab-root-ca.crt` so you can import it into your browser's **Trusted Root Certification Authorities** (`Authorities` store).
 
 | Service | FQDN | Backing Service / Notes |
 | :--- | :--- | :--- |
-| **ArgoCD UI** | `https://argocd-mgmt.homelab.cloud` | `argocd-server` (`argocd` namespace) |
-| **Vault UI & API** | `https://vault.homelab.cloud` | `vault:8200` (`vault` namespace, TLS passthrough via `ServersTransport`) |
-| **Grafana UI** | `https://grafana.homelab.cloud` | `grafana:80` (`monitoring` namespace) |
-| **Longhorn UI** | `https://longhorn.homelab.cloud` | `longhorn-frontend:80` (`longhorn-system` namespace) |
-| **VictoriaMetrics (`VMAuth`)** | `https://vm.homelab.cloud` | Redirects `/` to `/select/0/vmui/`; exposes `/vmalert/` and `/vmalertmanager/` |
-| **VictoriaLogs (`VMAuth`)** | `https://vl.homelab.cloud` | Redirects `/` to `/select/vmui/` |
-| **Alloy Logs Push** | `https://alloy-logs.homelab.cloud` | External Loki push endpoint (`/loki/api/v1/push`) |
-| **Alloy Metrics Push** | `https://alloy-metrics.homelab.cloud` | External Prometheus remote-write receiver (`/api/v1/write`) |
+| **ArgoCD UI** | `https://argocd.internal.cloud` | `argocd-server` (`argocd` namespace) |
+| **Vault UI & API** | `https://vault.internal.cloud` | `vault:8200` (`vault` namespace, TLS passthrough via `ServersTransport`) |
+| **Grafana UI** | `https://grafana.internal.cloud` | `grafana:80` (`monitoring` namespace) |
+| **Longhorn UI** | `https://longhorn.internal.cloud` | `longhorn-frontend:80` (`longhorn-system` namespace) |
+| **VictoriaMetrics (`VMAuth`)** | `https://vm.internal.cloud` | Redirects `/` to `/select/0/vmui/`; exposes `/vmalert/` and `/vmalertmanager/` |
+| **VictoriaLogs (`VMAuth`)** | `https://vl.internal.cloud` | Redirects `/` to `/select/vmui/` |
+| **Alloy Logs Push** | `https://alloy-logs.internal.cloud` | External Loki push endpoint (`/loki/api/v1/push`) |
+| **Alloy Metrics Push** | `https://alloy-metrics.internal.cloud` | External Prometheus remote-write receiver (`/api/v1/write`) |
 
 ---
 
@@ -227,7 +250,7 @@ infra_talos/
 │   ├── cert-manager/                      # Wave 1: Cert-Manager + Homelab Root CA Secret
 │   ├── metallb/                           # Wave 1: MetalLB Controller & Speaker
 │   ├── metrics-server/                    # Wave 1: Kubernetes Metrics Server
-│   ├── homelab-tls/                       # Wave 2: ClusterIssuer & *.homelab.cloud Certificates
+│   ├── homelab-tls/                       # Wave 2: ClusterIssuer & *.internal.cloud Certificates
 │   ├── trust-manager/                     # Wave 2: Cluster-wide Homelab CA Bundle distribution
 │   ├── metallb-custom-ip-pool/            # Wave 2: MetalLB L2 Pool (10.10.20.125-10.10.20.129)
 │   ├── longhorn/                          # Wave 2: Longhorn Distributed Block Storage
@@ -250,7 +273,10 @@ infra_talos/
 │   │   └── app-projects.yaml.tftpl        # ArgoCD AppProjects (core-services, observability, workloads)
 │   └── appsets/
 │       ├── core-services-appset.yaml.tftpl # Sync-wave ordered Core Services ApplicationSet (Waves 1-3)
-│       └── observability-appset.yaml.tftpl # Sync-wave ordered Observability ApplicationSet (Waves 4-6)
+│       ├── observability-appset.yaml.tftpl # Sync-wave ordered Observability ApplicationSet (Waves 4-6)
+│       └── workloads-appset.yaml.tftpl     # Optional Wave 7 Workloads ApplicationSet (HA PostgreSQL)
+├── workloads/                             # Layer 5: Optional Production Workloads (Wave 7)
+│   └── postgres-cluster/                  # 2-node HA CloudNativePG PostgreSQL 16 + Vault ESO + S3 Barman Backup
 └── terraform/
     ├── versions.tf                        # Provider requirements (bpg/proxmox, siderolabs/talos, helm, kubernetes)
     ├── providers.tf                       # Provider configurations
@@ -292,15 +318,77 @@ kubectl get nodes -o wide
 
 ### 2. Retrieve Service Credentials
 
-* **ArgoCD Admin Password** (`https://argocd-mgmt.homelab.cloud`, user: `admin`):
+* **ArgoCD Admin Password** (`https://argocd.internal.cloud`, user: `admin`):
   ```bash
   cd infra_talos/terraform && terraform output -raw argocd_initial_admin_password; echo
   ```
-* **Vault Root Token** (`https://vault.homelab.cloud`):
+* **Vault Root Token** (`https://vault.internal.cloud`):
   ```bash
   kubectl get secret -n vault vault-unseal-keys -o jsonpath='{.data.vault-root}' | base64 -d; echo
   ```
-* **Grafana Admin Credentials** (`https://grafana.homelab.cloud`, managed in Vault at `homelab/observability/grafana`):
+* **Grafana Admin Credentials** (`https://grafana.internal.cloud`, managed in Vault at `homelab/observability/grafana`):
   ```bash
   kubectl get secret -n monitoring grafana-admin-secret -o jsonpath='{.data.admin-password}' | base64 -d; echo
   ```
+* **Root CA Certificate for Browser Trust** (`*.internal.cloud`):
+  Import `infra_talos/terraform/generated/homelab-root-ca.crt` into your browser under **Settings $\rightarrow$ Privacy & Security $\rightarrow$ Security $\rightarrow$ Manage Certificates $\rightarrow$ Authorities $\rightarrow$ Import**.
+* **All Platform Service URLs**:
+  ```bash
+  cd infra_talos/terraform && terraform output platform_urls
+  ```
+
+---
+
+## Day-2 Operations & Disaster Recovery Runbook
+
+### 1. Switching Between Internal Root CA and Let's Encrypt (Cloudflare DNS-01)
+To switch all cluster ingresses (`*.<base_domain>`) from the built-in self-signed Root CA to publicly trusted Let's Encrypt wildcard certificates:
+```hcl
+# In terraform/terraform.tfvars:
+base_domain               = "example.com"
+tls_mode                  = "letsencrypt"
+acme_email                = "ops@example.com"
+acme_cloudflare_api_token = "your-cloudflare-dns-edit-token"
+```
+Run `terraform apply`. ArgoCD automatically updates `ClusterIssuer/homelab-ca-issuer` to use ACME DNS-01 and re-issues wildcard certificates across `traefik`, `monitoring`, and `vault` without downtime.
+
+### 2. Enabling S3 Disaster Recovery Backups (Longhorn Volumes)
+To automatically back up all Longhorn persistent volumes every night at 02:00 AM to AWS S3, Cloudflare R2, MinIO, or Backblaze B2:
+```hcl
+# In terraform/terraform.tfvars:
+longhorn_s3_backup_enabled = true
+longhorn_s3_backup_target  = "s3://my-cluster-backups@us-east-1/longhorn"
+longhorn_s3_endpoint       = "https://<account-id>.r2.cloudflarestorage.com" # Leave empty for AWS S3
+longhorn_s3_access_key     = "your-access-key-id"
+longhorn_s3_secret_key     = "your-secret-access-key"
+```
+Run `terraform apply`. Vault seeds the credentials under `homelab/storage/longhorn-s3`, `ExternalSecret` creates `Secret/longhorn-s3-credentials` in `longhorn-system`, and Longhorn registers the `daily-s3-backup` `RecurringJob`.
+
+#### Restoring a Volume from S3 (Single PVC or Full Cluster Rebuild)
+When a new cluster is provisioned with the same `longhorn_s3_backup_target`, Longhorn automatically discovers all existing S3 backups and lists them under **Backup** in the Longhorn UI (`https://longhorn.<base_domain>`):
+1. **Pause workload & delete empty PVC** (if restoring over an existing application):
+   ```bash
+   kubectl scale statefulset <app> -n <namespace> --replicas=0
+   kubectl delete pvc <pvc-name> -n <namespace>
+   ```
+2. **Restore in Longhorn UI**:
+   * Open `https://longhorn.<base_domain>` $\rightarrow$ **Backup** $\rightarrow$ select the backup volume $\rightarrow$ click **Restore** (check *Restore Volume Name*).
+   * Go to **Volume** $\rightarrow$ select the restored volume $\rightarrow$ **Create PV/PVC** with the original `Namespace` and `PVC Name` (leave *Use Previous PVC* checked).
+3. **Scale workload back up**:
+   ```bash
+   kubectl scale statefulset <app> -n <namespace> --replicas=1
+   ```
+
+### 3. Deploying the Turnkey HA PostgreSQL Cluster (`CloudNativePG`)
+Set `enable_workloads_appset = true` in `terraform/terraform.tfvars` and run `terraform apply`. ArgoCD deploys `workloads/postgres-cluster` at Sync Wave 7:
+* Provisions a 2-instance Primary/Standby PostgreSQL 16 cluster (`platform-postgres`) on Longhorn storage.
+* Syncs application database credentials (`appuser`) from Vault (`homelab/workloads/postgres`) into `Secret/platform-postgres-app-creds`.
+* Automatically exposes PostgreSQL metrics via `PodMonitor` to Grafana Alloy and VictoriaMetrics.
+
+### 4. Upgrading Talos Linux & Kubernetes Versions
+Update `talos_version` or `kubernetes_version` in `terraform/terraform.tfvars` and run `terraform apply` to update the machine configurations, or perform rolling node upgrades via `talosctl`:
+```bash
+export TALOSCONFIG="$(pwd)/generated/talosconfig"
+talosctl upgrade --nodes 10.10.20.121 --image "$(terraform output -raw talos_installer_image)"
+talosctl upgrade-k8s --nodes 10.10.20.120 --to 1.32.2
+```

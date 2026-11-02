@@ -164,8 +164,182 @@ variable "allow_scheduling_on_control_planes" {
 }
 
 # ==============================================================================
-# Layer 2: ArgoCD & GitOps Variables
+# Layer 2–4: Platform Domain, Networking, TLS & GitOps Variables
 # ==============================================================================
+variable "base_domain" {
+  description = "Base domain used across the platform for wildcard TLS certificates and service Ingresses (e.g. internal.cloud -> *.internal.cloud)"
+  type        = string
+  default     = "internal.cloud"
+}
+
+variable "cluster_environment" {
+  description = "Environment label attached to cluster telemetry (e.g. homelab, prod, staging)"
+  type        = string
+  default     = "homelab"
+}
+
+variable "cluster_region" {
+  description = "Region/location label attached to cluster telemetry (e.g. onprem, eu-central)"
+  type        = string
+  default     = "onprem"
+}
+
+variable "cluster_owner" {
+  description = "Owner/team label attached to cluster telemetry"
+  type        = string
+  default     = "homelab"
+}
+
+variable "metallb_ip_pool_start" {
+  description = "Start IPv4 address for the MetalLB L2 LoadBalancer IP pool"
+  type        = string
+  default     = "10.10.20.125"
+}
+
+variable "metallb_ip_pool_end" {
+  description = "End IPv4 address for the MetalLB L2 LoadBalancer IP pool"
+  type        = string
+  default     = "10.10.20.129"
+}
+
+variable "traefik_lb_ip" {
+  description = "Static LoadBalancer IPv4 address from the MetalLB pool assigned to Traefik Ingress Controller (defaults to metallb_ip_pool_start when empty)"
+  type        = string
+  default     = ""
+}
+
+variable "tls_mode" {
+  description = "Platform TLS mode: 'internal-ca' (cluster Root CA) or 'letsencrypt' (ACME DNS-01 via Cloudflare)"
+  type        = string
+  default     = "internal-ca"
+
+  validation {
+    condition     = contains(["internal-ca", "letsencrypt"], var.tls_mode)
+    error_message = "tls_mode must be either 'internal-ca' or 'letsencrypt'."
+  }
+}
+
+variable "tls_issuer_name" {
+  description = "Name of the cert-manager ClusterIssuer used for signing platform certificates"
+  type        = string
+  default     = "homelab-ca-issuer"
+}
+
+variable "tls_ca_secret_name" {
+  description = "Name of the Kubernetes Secret in cert-manager namespace holding the Root CA keypair (used when tls_mode = 'internal-ca')"
+  type        = string
+  default     = "homelab-ca-secret"
+}
+
+variable "tls_wildcard_secret_name" {
+  description = "Name of the wildcard TLS Secret distributed across ingress namespaces"
+  type        = string
+  default     = "wildcard-homelab-secret"
+}
+
+variable "acme_email" {
+  description = "Email address for Let's Encrypt ACME registration and expiry notifications (used when tls_mode = 'letsencrypt')"
+  type        = string
+  default     = "admin@internal.cloud"
+}
+
+variable "acme_server" {
+  description = "ACME directory URL for Let's Encrypt (use https://acme-staging-v02.api.letsencrypt.org/directory for testing)"
+  type        = string
+  default     = "https://acme-v02.api.letsencrypt.org/directory"
+}
+
+variable "acme_cloudflare_api_token" {
+  description = "Cloudflare API Token with Zone:DNS:Edit permissions for ACME DNS-01 wildcard validation (used when tls_mode = 'letsencrypt')"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "vault_kv_path" {
+  description = "Vault KV v2 mount path used for platform secrets"
+  type        = string
+  default     = "homelab"
+}
+
+variable "vault_cluster_secret_store" {
+  description = "Name of the External Secrets Operator ClusterSecretStore backed by Vault"
+  type        = string
+  default     = "vault-homelab"
+}
+
+variable "grafana_admin_user" {
+  description = "Initial Grafana administrator username seeded into Vault"
+  type        = string
+  default     = "admin"
+}
+
+variable "grafana_admin_password" {
+  description = "Initial Grafana administrator password seeded into Vault"
+  type        = string
+  default     = "admin"
+  sensitive   = true
+}
+
+variable "alloy_active_token" {
+  description = "Bearer token seeded into Vault for Grafana Alloy -> VMAuth collection authentication"
+  type        = string
+  default     = "homelab-alloy-collect-token-active"
+  sensitive   = true
+}
+
+variable "victoria_active_token" {
+  description = "Bearer token seeded into Vault for VMAgent/VLAgent/VMAlert -> VMAuth ingestion authentication"
+  type        = string
+  default     = "homelab-victoria-ingest-token-active"
+  sensitive   = true
+}
+
+variable "postgres_app_user" {
+  description = "Application PostgreSQL username seeded into Vault for CloudNativePG clusters"
+  type        = string
+  default     = "appuser"
+}
+
+variable "postgres_app_password" {
+  description = "Application PostgreSQL password seeded into Vault for CloudNativePG clusters"
+  type        = string
+  default     = "homelab-postgres-password"
+  sensitive   = true
+}
+
+variable "longhorn_s3_backup_enabled" {
+  description = "Enable S3 Backup Target and daily RecurringJob backups in Longhorn"
+  type        = bool
+  default     = false
+}
+
+variable "longhorn_s3_backup_target" {
+  description = "Longhorn S3 backup target URI (e.g. s3://my-bucket@us-east-1/longhorn)"
+  type        = string
+  default     = ""
+}
+
+variable "longhorn_s3_endpoint" {
+  description = "Optional custom S3 endpoint URL for MinIO / Cloudflare R2 / Backblaze B2 (leave empty for AWS S3)"
+  type        = string
+  default     = ""
+}
+
+variable "longhorn_s3_access_key" {
+  description = "S3 Access Key ID seeded into Vault for Longhorn backups"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "longhorn_s3_secret_key" {
+  description = "S3 Secret Access Key seeded into Vault for Longhorn backups"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "enable_argocd" {
   description = "Deploy ArgoCD onto the cluster via Helm"
   type        = bool
@@ -185,9 +359,9 @@ variable "argocd_chart_version" {
 }
 
 variable "argocd_domain" {
-  description = "FQDN for ArgoCD UI Ingress"
+  description = "FQDN for ArgoCD UI Ingress (leave empty to default to argocd.<base_domain>)"
   type        = string
-  default     = "argocd.homelab.cloud"
+  default     = ""
 }
 
 variable "argocd_ha_enabled" {
@@ -227,10 +401,22 @@ variable "gitops_observability_path" {
   default     = "observability"
 }
 
+variable "gitops_workloads_path" {
+  description = "Directory path inside gitops_repo_url for application & database workloads"
+  type        = string
+  default     = "workloads"
+}
+
 variable "enable_argocd_appsets" {
   description = "Deploy ArgoCD ApplicationSets (core-services & observability) automatically"
   type        = bool
   default     = true
+}
+
+variable "enable_workloads_appset" {
+  description = "Deploy ArgoCD ApplicationSet for optional Wave 7 workloads (e.g. HA CloudNativePG PostgreSQL cluster)"
+  type        = bool
+  default     = false
 }
 
 # ==============================================================================

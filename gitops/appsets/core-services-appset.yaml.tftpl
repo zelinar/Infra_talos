@@ -37,6 +37,90 @@
           repoURL: ${gitops_repo_url}
           targetRevision: ${gitops_repo_revision}
           path: '{{ .path.path }}'
+          helm:
+            values: |
+              {{- $name := .path.basename -}}
+              {{- if eq $name "cert-manager" }}
+              rootCA:
+                enabled: ${tls_mode == "internal-ca" ? "true" : "false"}
+                secretName: ${jsonencode(tls_ca_secret_name)}
+              {{- else if eq $name "homelab-tls" }}
+              mode: ${jsonencode(tls_mode)}
+              domain: ${jsonencode(base_domain)}
+              issuerName: ${jsonencode(tls_issuer_name)}
+              caSecretName: ${jsonencode(tls_ca_secret_name)}
+              wildcardSecretName: ${jsonencode(tls_wildcard_secret_name)}
+              acme:
+                email: ${jsonencode(acme_email)}
+                server: ${jsonencode(acme_server)}
+                cloudflare:
+                  apiToken: ${jsonencode(acme_cloudflare_api_token)}
+              {{- else if eq $name "metallb-custom-ip-pool" }}
+              metallb:
+                addressPool:
+                  startIP: ${jsonencode(metallb_ip_pool_start)}
+                  endIP: ${jsonencode(metallb_ip_pool_end)}
+              {{- else if eq $name "longhorn" }}
+              ingress:
+                host: ${jsonencode("longhorn.${base_domain}")}
+                tlsSecretName: ${jsonencode(tls_wildcard_secret_name)}
+              backup:
+                enabled: ${longhorn_s3_backup_enabled ? "true" : "false"}
+                secretStoreName: ${jsonencode(vault_cluster_secret_store)}
+                recurringJob:
+                  enabled: ${longhorn_s3_backup_enabled ? "true" : "false"}
+              longhorn:
+                defaultSettings:
+                  backupTarget: ${jsonencode(longhorn_s3_backup_target)}
+                  backupTargetCredentialSecret: ${jsonencode(longhorn_s3_backup_enabled ? "longhorn-s3-credentials" : "")}
+              {{- else if eq $name "traefik" }}
+              traefik:
+                service:
+                  spec:
+                    loadBalancerIP: ${jsonencode(traefik_lb_ip)}
+                tlsStore:
+                  default:
+                    defaultCertificate:
+                      secretName: ${jsonencode(tls_wildcard_secret_name)}
+              {{- else if eq $name "external-secrets" }}
+              clusterSecrets:
+                dockerHubPull:
+                  secretStoreName: ${jsonencode(vault_cluster_secret_store)}
+              {{- else if eq $name "vault" }}
+              vault:
+                ingress:
+                  domain: ${jsonencode(base_domain)}
+                  issuerName: ${jsonencode(tls_issuer_name)}
+                  tlsSecretName: ${jsonencode(tls_wildcard_secret_name)}
+                  hosts:
+                    - ${jsonencode("vault.${base_domain}")}
+                startupSecrets:
+                  - type: kv
+                    path: ${jsonencode("${vault_kv_path}/data/observability/victoria")}
+                    data:
+                      data:
+                        alloy_active_token: ${jsonencode(alloy_active_token)}
+                        victoria_active_token: ${jsonencode(victoria_active_token)}
+                  - type: kv
+                    path: ${jsonencode("${vault_kv_path}/data/observability/grafana")}
+                    data:
+                      data:
+                        admin-user: ${jsonencode(grafana_admin_user)}
+                        admin-password: ${jsonencode(grafana_admin_password)}
+                  - type: kv
+                    path: ${jsonencode("${vault_kv_path}/data/workloads/postgres")}
+                    data:
+                      data:
+                        username: ${jsonencode(postgres_app_user)}
+                        password: ${jsonencode(postgres_app_password)}
+                  - type: kv
+                    path: ${jsonencode("${vault_kv_path}/data/storage/longhorn-s3")}
+                    data:
+                      data:
+                        access_key_id: ${jsonencode(longhorn_s3_access_key)}
+                        secret_access_key: ${jsonencode(longhorn_s3_secret_key)}
+                        endpoint: ${jsonencode(longhorn_s3_endpoint)}
+              {{- end }}
         destination:
           server: https://kubernetes.default.svc
           namespace: >-

@@ -34,16 +34,16 @@ grafana:
     path: /
     pathType: Prefix
     hosts:
-      - "grafana.homelab.cloud"
+      - "grafana.internal.cloud"
     tls:
       - hosts:
-          - "grafana.homelab.cloud"
+          - "grafana.internal.cloud"
         secretName: "wildcard-homelab-secret"
 
   grafana.ini:
     server:
-      root_url: "https://grafana.homelab.cloud/"
-      domain: "grafana.homelab.cloud"
+      root_url: "https://grafana.internal.cloud/"
+      domain: "grafana.internal.cloud"
     analytics:
       reporting_enabled: false
       check_for_updates: true

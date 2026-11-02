@@ -1,7 +1,35 @@
+{{- $mode := .Values.mode | default "internal-ca" -}}
+{{- $issuerName := .Values.issuerName | default "homelab-ca-issuer" -}}
+{{- if and (eq $mode "letsencrypt") .Values.acme.cloudflare.apiToken }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.acme.cloudflare.secretName | default "cloudflare-api-token-secret" }}
+  namespace: {{ .Values.acme.cloudflare.secretNamespace | default "cert-manager" }}
+type: Opaque
+stringData:
+  {{ .Values.acme.cloudflare.secretKey | default "api-token" }}: {{ .Values.acme.cloudflare.apiToken | quote }}
+{{- end }}
+---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: {{ .Values.issuerName | default "homelab-ca-issuer" }}
+  name: {{ $issuerName }}
 spec:
+  {{- if eq $mode "letsencrypt" }}
+  acme:
+    email: {{ .Values.acme.email | default (printf "admin@%s" (.Values.domain | default "internal.cloud")) | quote }}
+    server: {{ .Values.acme.server | default "https://acme-v02.api.letsencrypt.org/directory" | quote }}
+    privateKeySecretRef:
+      name: {{ .Values.acme.privateKeySecretName | default "letsencrypt-account-key" }}
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: {{ .Values.acme.cloudflare.secretName | default "cloudflare-api-token-secret" }}
+              key: {{ .Values.acme.cloudflare.secretKey | default "api-token" }}
+  {{- else }}
   ca:
     secretName: {{ .Values.caSecretName | default "homelab-ca-secret" }}
+  {{- end }}

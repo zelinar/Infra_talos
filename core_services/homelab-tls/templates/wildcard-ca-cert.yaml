@@ -1,15 +1,17 @@
-{{- $domain := .Values.domain | default "homelab.cloud" -}}
+{{- $domain := .Values.domain | default "internal.cloud" -}}
 {{- $issuer := .Values.issuerName | default "homelab-ca-issuer" -}}
+{{- $certName := .Values.certificateName | default "wildcard-homelab-crt" -}}
+{{- $secretName := .Values.wildcardSecretName | default "wildcard-homelab-secret" -}}
 {{- range $ns := (.Values.targetNamespaces | default (list "traefik" "monitoring")) }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: wildcard-homelab-crt
+  name: {{ $certName }}
   namespace: {{ $ns }}
 spec:
   isCA: false
-  secretName: wildcard-homelab-secret
+  secretName: {{ $secretName }}
   issuerRef:
     name: {{ $issuer }}
     kind: ClusterIssuer

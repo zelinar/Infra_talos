@@ -1,6 +1,22 @@
-domain: "homelab.cloud"
+# TLS Mode: "internal-ca" (self-signed Root CA) or "letsencrypt" (ACME DNS-01 via Cloudflare)
+mode: "internal-ca"
+
+domain: "internal.cloud"
 issuerName: "homelab-ca-issuer"
 caSecretName: "homelab-ca-secret"
+certificateName: "wildcard-homelab-crt"
+wildcardSecretName: "wildcard-homelab-secret"
 targetNamespaces:
   - traefik
   - monitoring
+
+acme:
+  email: "admin@internal.cloud"
+  # Production: https://acme-v02.api.letsencrypt.org/directory
+  # Staging:    https://acme-staging-v02.api.letsencrypt.org/directory
+  server: "https://acme-v02.api.letsencrypt.org/directory"
+  privateKeySecretName: "letsencrypt-account-key"
+  cloudflare:
+    apiToken: ""
+    secretName: "cloudflare-api-token-secret"
+    secretKey: "api-token"

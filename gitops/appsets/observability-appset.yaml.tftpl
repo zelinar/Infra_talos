@@ -35,6 +35,71 @@
           repoURL: ${gitops_repo_url}
           targetRevision: ${gitops_repo_revision}
           path: '{{ .path.path }}'
+          helm:
+            values: |
+              {{- $name := .path.basename -}}
+              {{- if eq $name "victoria-metrics" }}
+              victoria-metrics:
+                ingress:
+                  ingressDomain: ${jsonencode(base_domain)}
+              {{- else if eq $name "victoria-logs" }}
+              victoria-logs:
+                ingress:
+                  ingressDomain: ${jsonencode(base_domain)}
+              {{- else if eq $name "victoria-common" }}
+              victoria-common:
+                staticSecrets:
+                  alloyActiveToken: ${jsonencode(alloy_active_token)}
+                  victoriaActiveToken: ${jsonencode(victoria_active_token)}
+                credentialsSecret:
+                  secretStoreName: ${jsonencode(vault_cluster_secret_store)}
+                ingress:
+                  ingressDomain: ${jsonencode(base_domain)}
+                  tlsSecretName: ${jsonencode(tls_wildcard_secret_name)}
+              {{- else if eq $name "grafana-alloy" }}
+              global:
+                cluster:
+                  name: ${jsonencode(cluster_name)}
+                  environment: ${jsonencode(cluster_environment)}
+                  region: ${jsonencode(cluster_region)}
+                  owner: ${jsonencode(cluster_owner)}
+              alloy-external:
+                customIngresses:
+                  defaults:
+                    domain: ${jsonencode(base_domain)}
+                    tlsSecret: ${jsonencode(tls_wildcard_secret_name)}
+                  entries:
+                    logs:
+                      host: ${jsonencode("alloy-logs.${base_domain}")}
+                    metrics:
+                      host: ${jsonencode("alloy-metrics.${base_domain}")}
+              configExternal:
+                snmp:
+                  defaultLabels:
+                    owner: ${jsonencode(cluster_owner)}
+              {{- else if eq $name "alloy-daemonset" }}
+              global:
+                cluster:
+                  name: ${jsonencode(cluster_name)}
+                  environment: ${jsonencode(cluster_environment)}
+                  region: ${jsonencode(cluster_region)}
+                  owner: ${jsonencode(cluster_owner)}
+              {{- else if eq $name "grafana" }}
+              credentialsSecret:
+                secretStoreName: ${jsonencode(vault_cluster_secret_store)}
+              grafana:
+                ingress:
+                  hosts:
+                    - ${jsonencode("grafana.${base_domain}")}
+                  tls:
+                    - hosts:
+                        - ${jsonencode("grafana.${base_domain}")}
+                      secretName: ${jsonencode(tls_wildcard_secret_name)}
+                grafana.ini:
+                  server:
+                    root_url: ${jsonencode("https://grafana.${base_domain}/")}
+                    domain: ${jsonencode("grafana.${base_domain}")}
+              {{- end }}
         destination:
           server: https://kubernetes.default.svc
           namespace: monitoring

@@ -47,6 +47,11 @@ output "talosconfig_path" {
   value       = abspath(local_sensitive_file.talosconfig.filename)
 }
 
+output "root_ca_cert_path" {
+  description = "Path to the exported Root CA certificate (.crt) to import into browser/OS trust stores (when tls_mode = 'internal-ca')"
+  value       = var.tls_mode == "internal-ca" ? abspath(local_file.root_ca_cert[0].filename) : null
+}
+
 output "kubeconfig_raw" {
   description = "Raw kubeconfig content"
   value       = talos_cluster_kubeconfig.this.kubeconfig_raw
@@ -61,7 +66,22 @@ output "talosconfig_raw" {
 
 output "argocd_domain" {
   description = "Configured ArgoCD Ingress FQDN"
-  value       = var.enable_argocd ? "https://${var.argocd_domain}" : null
+  value       = var.enable_argocd ? "https://${local.argocd_domain}" : null
+}
+
+output "platform_urls" {
+  description = "Platform service URLs derived from base_domain"
+  value = {
+    argocd          = "https://${local.argocd_domain}"
+    vault           = "https://vault.${var.base_domain}"
+    grafana         = "https://grafana.${var.base_domain}"
+    longhorn        = "https://longhorn.${var.base_domain}"
+    victoriametrics = "https://vm.${var.base_domain}"
+    victorialogs    = "https://vl.${var.base_domain}"
+    alloy_logs      = "https://alloy-logs.${var.base_domain}"
+    alloy_metrics   = "https://alloy-metrics.${var.base_domain}"
+    traefik_lb_ip   = local.traefik_lb_ip
+  }
 }
 
 output "argocd_initial_admin_password" {

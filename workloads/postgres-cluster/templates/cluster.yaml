@@ -1,0 +1,60 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.clusterName | default "platform-postgres" }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  instances: {{ .Values.instances | default 2 }}
+  imageName: {{ .Values.imageName | default "ghcr.io/cloudnative-pg/postgresql:16.6" | quote }}
+  enableSuperuserAccess: true
+
+  bootstrap:
+    initdb:
+      database: {{ .Values.database.name | default "appdb" | quote }}
+      owner: {{ .Values.database.owner | default "appuser" | quote }}
+      {{- if and .Values.credentialsSecret .Values.credentialsSecret.enabled }}
+      secret:
+        name: {{ .Values.credentialsSecret.secretName | default "platform-postgres-app-creds" }}
+      {{- end }}
+
+  storage:
+    storageClass: {{ .Values.storage.storageClass | default "longhorn" | quote }}
+    size: {{ .Values.storage.size | default "10Gi" | quote }}
+
+  resources:
+    {{- toYaml .Values.resources | nindent 4 }}
+
+  monitoring:
+    enablePodMonitor: {{ .Values.monitoring.enablePodMonitor | default true }}
+
+  {{- if and .Values.backup .Values.backup.enabled }}
+  backup:
+    retentionPolicy: {{ .Values.backup.retentionPolicy | default "14d" | quote }}
+    barmanObjectStore:
+      destinationPath: {{ .Values.backup.destinationPath | quote }}
+      {{- if .Values.backup.endpointURL }}
+      endpointURL: {{ .Values.backup.endpointURL | quote }}
+      {{- end }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .Values.backup.s3CredentialsSecretName | default "longhorn-s3-credentials" }}
+          key: {{ .Values.backup.accessKeyIdKey | default "AWS_ACCESS_KEY_ID" }}
+        secretAccessKey:
+          name: {{ .Values.backup.s3CredentialsSecretName | default "longhorn-s3-credentials" }}
+          key: {{ .Values.backup.secretAccessKeyKey | default "AWS_SECRET_ACCESS_KEY" }}
+      wal:
+        compression: gzip
+  {{- end }}
+{{- if and .Values.backup .Values.backup.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ .Values.clusterName | default "platform-postgres" }}-daily-backup
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: {{ .Values.backup.schedule | default "0 0 3 * * *" | quote }}
+  backupOwnerReference: self
+  cluster:
+    name: {{ .Values.clusterName | default "platform-postgres" }}
+{{- end }}

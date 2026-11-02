@@ -35,7 +35,7 @@ victoria-common:
 
   ingress:
     enabled: true
-    ingressDomain: "homelab.cloud"
+    ingressDomain: "internal.cloud"
     className: traefik
     setNamespace: false
     tlsSecretName: "wildcard-homelab-secret"

@@ -1,7 +1,7 @@
 victoria-logs:
   ingress:
     enabled: false
-    ingressDomain: "homelab.cloud"
+    ingressDomain: "internal.cloud"
     className: traefik
     setNamespace: false
     namePrefix: ""

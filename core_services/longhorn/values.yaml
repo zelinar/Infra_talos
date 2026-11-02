@@ -1,3 +1,22 @@
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  host: "longhorn.internal.cloud"
+  tlsSecretName: "wildcard-homelab-secret"
+
+backup:
+  enabled: false
+  secretStoreName: "vault-homelab"
+  secretStoreKind: "ClusterSecretStore"
+  remoteKey: "storage/longhorn-s3"
+  credentialSecretName: "longhorn-s3-credentials"
+  recurringJob:
+    enabled: false
+    name: "daily-s3-backup"
+    cron: "0 2 * * *"
+    retain: 7
+    concurrency: 2
+
 longhorn:
   longhornUI:
     replicas: 1
@@ -9,5 +28,7 @@ longhorn:
     defaultReplicaCount: 2
     storageOverProvisioningPercentage: 200
     storageMinimalAvailablePercentage: 15
+    backupTarget: ""
+    backupTargetCredentialSecret: ""
   preUpgradeChecker:
     jobEnabled: false

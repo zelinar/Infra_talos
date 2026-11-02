@@ -12,6 +12,11 @@
 {{- $entryEnabled = $ingress.enabled }}
 {{- end }}
 {{- if $entryEnabled }}
+{{- $domain := $defaults.domain | default "internal.cloud" }}
+{{- $host := $ingress.host }}
+{{- if and $domain (not (contains "." $host)) }}
+{{- $host = printf "%s.%s" $host $domain }}
+{{- end }}
 {{- $paths := $ingress.paths | default (list (dict "path" $ingress.path "pathType" $ingress.pathType "port" $ingress.port)) }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -24,7 +29,7 @@ metadata:
 spec:
   ingressClassName: {{ $ingress.ingressClassName | default $defaults.ingressClassName }}
   rules:
-    - host: {{ $ingress.host }}
+    - host: {{ $host }}
       http:
         paths:
           {{- range $p := $paths }}
@@ -39,7 +44,7 @@ spec:
   tls:
     - secretName: {{ $ingress.tlsSecret | default $defaults.tlsSecret }}
       hosts:
-        - {{ $ingress.host }}
+        - {{ $host }}
 {{- end }}
 {{- end }}
 {{- end }}

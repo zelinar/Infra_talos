@@ -128,15 +128,16 @@ alloy-external:
     enabled: true
     defaults:
       ingressClassName: traefik
+      domain: "internal.cloud"
       tlsSecret: "wildcard-homelab-secret"
     entries:
       logs:
-        host: "alloy-logs.homelab.cloud"
+        host: "alloy-logs"
         paths:
           - path: /loki/api/v1/push
             port: 9000
       metrics:
-        host: "alloy-metrics.homelab.cloud"
+        host: "alloy-metrics"
         paths:
           - path: /api/v1/metrics/write
             port: 9001

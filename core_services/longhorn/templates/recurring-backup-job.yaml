@@ -1,0 +1,14 @@
+{{- if and .Values.backup .Values.backup.enabled .Values.backup.recurringJob .Values.backup.recurringJob.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.backup.recurringJob.name | default "daily-s3-backup" }}
+  namespace: {{ .Release.Namespace | default "longhorn-system" }}
+spec:
+  cron: {{ .Values.backup.recurringJob.cron | default "0 2 * * *" | quote }}
+  task: "backup"
+  groups:
+    - default
+  retain: {{ .Values.backup.recurringJob.retain | default 7 }}
+  concurrency: {{ .Values.backup.recurringJob.concurrency | default 2 }}
+{{- end }}

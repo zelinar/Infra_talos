@@ -31,6 +31,43 @@ pod_subnet     = "10.244.0.0/16"
 service_subnet = "10.96.0.0/12"
 
 # ==============================================================================
+# Platform Domain, LoadBalancer Pool & GitOps Configuration (Layers 2–4)
+# ==============================================================================
+base_domain         = "internal.cloud"
+cluster_environment = "homelab"
+cluster_region      = "onprem"
+cluster_owner       = "homelab"
+
+metallb_ip_pool_start = "10.10.20.125"
+metallb_ip_pool_end   = "10.10.20.129"
+traefik_lb_ip         = "10.10.20.125" # Defaults to metallb_ip_pool_start if left empty
+
+# TLS Mode: "internal-ca" (self-signed Root CA) or "letsencrypt" (Cloudflare DNS-01 ACME)
+tls_mode                  = "internal-ca"
+acme_email                = "admin@internal.cloud"
+acme_cloudflare_api_token = "" # Required only when tls_mode = "letsencrypt"
+
+gitops_repo_url      = "https://github.com/zelinar/Infra_talos.git"
+gitops_repo_revision = "main"
+
+# Initial credentials seeded into Vault KV v2 and synced via External Secrets Operator
+grafana_admin_user     = "admin"
+grafana_admin_password = "admin"
+alloy_active_token     = "homelab-alloy-collect-token-active"
+victoria_active_token  = "homelab-victoria-ingest-token-active"
+postgres_app_user      = "appuser"
+postgres_app_password  = "homelab-postgres-password"
+
+# Optional Day-2 Operations: Longhorn S3 Disaster Recovery Backups & HA Workloads
+longhorn_s3_backup_enabled = false
+longhorn_s3_backup_target  = "" # e.g. "s3://my-backup-bucket@us-east-1/longhorn"
+longhorn_s3_endpoint       = "" # Optional S3 endpoint for MinIO / Cloudflare R2
+longhorn_s3_access_key     = ""
+longhorn_s3_secret_key     = ""
+
+enable_workloads_appset = false # Set true to deploy Wave 7 workloads (HA CloudNativePG PostgreSQL cluster)
+
+# ==============================================================================
 # Cluster Nodes
 # ==============================================================================
 nodes = {
