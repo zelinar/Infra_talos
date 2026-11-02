@@ -9,6 +9,7 @@ wildcardSecretName: "wildcard-homelab-secret"
 targetNamespaces:
   - traefik
   - monitoring
+  - llm-stack
 
 acme:
   email: "admin@internal.cloud"

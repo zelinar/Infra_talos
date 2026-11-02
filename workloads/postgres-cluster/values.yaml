@@ -5,6 +5,8 @@ imageName: "ghcr.io/cloudnative-pg/postgresql:16.6"
 database:
   name: "appdb"
   owner: "appuser"
+  postInitApplicationSQL:
+    - "CREATE EXTENSION IF NOT EXISTS vector;"
 
 storage:
   storageClass: "longhorn"

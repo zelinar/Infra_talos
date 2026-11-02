@@ -16,6 +16,10 @@ spec:
       secret:
         name: {{ .Values.credentialsSecret.secretName | default "platform-postgres-app-creds" }}
       {{- end }}
+      {{- if .Values.database.postInitApplicationSQL }}
+      postInitApplicationSQL:
+        {{- toYaml .Values.database.postInitApplicationSQL | nindent 8 }}
+      {{- end }}
 
   storage:
     storageClass: {{ .Values.storage.storageClass | default "longhorn" | quote }}

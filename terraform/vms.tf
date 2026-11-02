@@ -72,6 +72,18 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     }
   }
 
+  # Optional PCIe GPU Passthrough (e.g. 2x NVIDIA Quadro P620 -> hostpci0, hostpci1)
+  dynamic "hostpci" {
+    for_each = each.value.gpu_pci_devices
+    content {
+      device = "hostpci${hostpci.key}"
+      id     = hostpci.value
+      pcie   = true
+      rombar = true
+      xvga   = false
+    }
+  }
+
   network_device {
     bridge = var.network_bridge
     model  = "virtio"

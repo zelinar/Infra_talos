@@ -95,10 +95,11 @@ flowchart TB
 | **Wave 6** | `alloy-daemonset` (`1.6.2`) | `monitoring` | Node-level `alloy-linux-ds` DaemonSet scraping host Unix metrics (`node_exporter` equivalent) and Kubelet/cAdvisor metrics. |
 | **Wave 6** | `grafana` (`12.3.2`) | `monitoring` | Grafana UI (`10Gi` Longhorn PVC) with `victoriametrics-metrics-datasource` and `victoriametrics-logs-datasource` plugins, pre-provisioned datasources, and admin credentials synced from `vault-homelab`. |
 
-### 5. Layer 5: Production Workloads & HA Databases (`workloads/` — Optional Wave 7)
+### 5. Layer 5: Production Workloads, HA Vector DB & Local AI (`workloads/` — Wave 7)
 | Sync Wave | Component | Namespace | Role & Wiring |
 | :---: | :--- | :--- | :--- |
-| **Wave 7** | `postgres-cluster` (`0.1.0`) | `postgres-cluster` | 2-node HA **CloudNativePG** PostgreSQL 16 cluster (`StorageClass: longhorn`), database credentials synced from Vault (`homelab/workloads/postgres`) via `ExternalSecret`, `PodMonitor` scraped by Grafana Alloy, and optional S3 Barman continuous WAL archiving & daily scheduled backups. |
+| **Wave 7** | `postgres-cluster` (`0.1.0`) | `postgres-cluster` | 2-node HA **CloudNativePG** PostgreSQL 16 cluster (`StorageClass: longhorn`) with `pgvector` extension enabled (`CREATE EXTENSION IF NOT EXISTS vector;`), database credentials synced from Vault (`homelab/workloads/postgres`) via `ExternalSecret`, and `PodMonitor` scraped by Grafana Alloy. |
+| **Wave 7** | `llm-stack` (`0.1.0`) | `llm-stack` | Local AI & LLM Stack: `nvidia-device-plugin` DaemonSet (`RuntimeClass: nvidia`), Multi-GPU **Ollama** StatefulSet (`50Gi` Longhorn PVC, auto-pulling `nomic-embed-text`, `llama3.2:3b`, `qwen2.5-coder:3b`, `qwen2.5-coder:7b`), and **Open WebUI** (`https://chat.internal.cloud`) backed by PostgreSQL `pgvector` & Vault `ExternalSecret`. |
 
 ---
 
@@ -123,13 +124,13 @@ The entire stack (Layers 1–5) is parameterized end-to-end from **`terraform/te
 
 ### 1. Secret Management Flow (Vault + External Secrets Operator)
 
-All infrastructure secrets live in the in-cluster **HashiCorp Vault** instance under the dedicated **`homelab`** KV v2 secrets engine (`path: homelab`), exposed cluster-wide via `ClusterSecretStore/vault-homelab`:
+All infrastructure secrets live in the in-cluster **HashiCorp Vault** instance under the dedicated **`internal`** KV v2 secrets engine (`path: internal`), exposed cluster-wide via `ClusterSecretStore/vault-homelab`:
 
 ```mermaid
 flowchart LR
     subgraph VaultNS["Namespace: vault"]
         BV["bank-vaults operator &\nvault-configurer"]
-        V["Vault Pod (vault-0)\nKV v2 Engine: homelab/"]
+        V["Vault Pod (vault-0)\nKV v2 Engine: internal/"]
         UK["Secret: vault-unseal-keys\n(5 Shamir Keys + vault-root Token)"]
         SA["ServiceAccount: vault-sa"]
         BV -- "Auto-Init & Auto-Unseal" --> V
@@ -138,7 +139,7 @@ flowchart LR
     end
 
     subgraph ClusterScope["Cluster-Scoped"]
-        CSS["ClusterSecretStore:\nvault-homelab\n(path: homelab)"]
+        CSS["ClusterSecretStore:\nvault-homelab\n(path: internal)"]
     end
 
     subgraph MonNS["Namespace: monitoring"]
@@ -158,14 +159,14 @@ flowchart LR
 ```
 
 * **Zero Manual Unsealing**: `bank-vaults` initializes Vault on first boot, stores the unseal keys and root token in `Secret/vault-unseal-keys` (`vault` namespace), automatically unseals `vault-0` across restarts, and runs `vault-configurer` to apply policies, Kubernetes Auth roles, and `startupSecrets`.
-* **Seeded `homelab` Paths (`core_services/vault/values.yaml`)**:
-  * `homelab/data/observability/victoria` (`remoteRef.key: observability/victoria`):
+* **Seeded `internal` Paths (`core_services/vault/values.yaml`)**:
+  * `internal/data/observability/victoria` (`remoteRef.key: observability/victoria`):
     * `alloy_active_token`: Bearer token used by Grafana Alloy to push to `VMAuth` (`collect-active` user).
     * `victoria_active_token`: Bearer token used by `VMAgent`, `VLAgent`, and `VMAlert` to push to `VMAuth` (`ingest-active` user).
-  * `homelab/data/observability/grafana` (`remoteRef.key: observability/grafana`):
+  * `internal/data/observability/grafana` (`remoteRef.key: observability/grafana`):
     * `admin-user` & `admin-password`: Synced into `Secret/grafana-admin-secret` and mounted by Grafana.
 * **Adding New Secrets to Any Namespace**:
-  1. Write a secret into the `homelab/` space in Vault UI (`https://vault.internal.cloud`) or add it under `vault.startupSecrets` in `core_services/vault/values.yaml`.
+  1. Write a secret into the `internal/` space in Vault UI (`https://vault.internal.cloud`) or add it under `vault.startupSecrets` in `core_services/vault/values.yaml`.
   2. Create an `ExternalSecret` (`apiVersion: external-secrets.io/v1`) referencing `secretStoreRef.name: vault-homelab` (`kind: ClusterSecretStore`).
 
 ---

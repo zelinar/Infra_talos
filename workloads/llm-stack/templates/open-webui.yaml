@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: open-webui
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.openWebui.storage.storageClass | default "longhorn" | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.openWebui.storage.size | default "10Gi" | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: open-webui
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.openWebui.port | default 8080 }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: open-webui
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: open-webui
+spec:
+  replicas: {{ .Values.openWebui.replicas | default 1 }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: open-webui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: open-webui
+    spec:
+      containers:
+        - name: open-webui
+          image: {{ .Values.openWebui.image | default "ghcr.io/open-webui/open-webui:v0.5.20" | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.openWebui.port | default 8080 }}
+              protocol: TCP
+          env:
+            - name: OLLAMA_BASE_URL
+              value: "http://ollama.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.ollama.port | default 11434 }}"
+            - name: DEFAULT_LOCALE
+              value: {{ .Values.openWebui.defaultLocale | default "en-US" | quote }}
+            - name: DEFAULT_MODELS
+              value: {{ .Values.openWebui.defaultModels | default "qwen2.5-coder:3b,llama3.2:3b,qwen2.5-coder:7b" | quote }}
+            - name: ENABLE_SIGNUP
+              value: {{ .Values.openWebui.enableSignup | default true | quote }}
+            - name: RAG_EMBEDDING_ENGINE
+              value: "ollama"
+            - name: RAG_EMBEDDING_MODEL
+              value: {{ .Values.openWebui.ragEmbeddingModel | default "nomic-embed-text:latest" | quote }}
+            {{- if and .Values.openWebui.database .Values.openWebui.database.enabled }}
+            - name: VECTOR_DB
+              value: "pgvector"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecret.secretName | default "llm-stack-secrets" }}
+                  key: DATABASE_URL
+            - name: PGVECTOR_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecret.secretName | default "llm-stack-secrets" }}
+                  key: PGVECTOR_DB_URL
+            {{- end }}
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.credentialsSecret.secretName | default "llm-stack-secrets" }}
+                  key: WEBUI_SECRET_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.openWebui.resources | nindent 12 }}
+          volumeMounts:
+            - name: webui-data
+              mountPath: /app/backend/data
+      volumes:
+        - name: webui-data
+          persistentVolumeClaim:
+            claimName: open-webui-data

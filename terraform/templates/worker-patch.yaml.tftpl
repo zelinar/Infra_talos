@@ -33,6 +33,20 @@ machine:
       partitions:
         - mountpoint: /var/lib/longhorn
 %{ endif ~}
+%{ if enable_nvidia_gpu && is_gpu_worker ~}
+  kernel:
+    modules:
+      - name: nvidia
+      - name: nvidia_uvm
+      - name: nvidia_drm
+      - name: nvidia_modeset
+  sysctls:
+    net.core.bpf_jit_harden: "1"
+%{ endif ~}
+%{ if is_gpu_worker ~}
+  nodeLabels:
+    gpu.internal.cloud/nvidia: "true"
+%{ endif ~}
 
 cluster:
   network:

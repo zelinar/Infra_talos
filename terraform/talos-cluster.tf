@@ -70,15 +70,17 @@ data "talos_machine_configuration" "worker" {
 
   config_patches = [
     templatefile("${path.module}/templates/worker-patch.yaml.tftpl", {
-      hostname        = each.key
-      installer_image = local.talos_installer_image
-      ip              = each.value.ip
-      cidr_prefix     = var.network_cidr_prefix
-      gateway         = var.network_gateway
-      dns_servers     = var.dns_servers
-      pod_subnet      = var.pod_subnet
-      service_subnet  = var.service_subnet
-      has_data_disk   = each.value.data_disk_size_gb > 0
+      hostname          = each.key
+      installer_image   = local.talos_installer_image
+      ip                = each.value.ip
+      cidr_prefix       = var.network_cidr_prefix
+      gateway           = var.network_gateway
+      dns_servers       = var.dns_servers
+      pod_subnet        = var.pod_subnet
+      service_subnet    = var.service_subnet
+      has_data_disk     = each.value.data_disk_size_gb > 0
+      enable_nvidia_gpu = var.enable_nvidia_gpu
+      is_gpu_worker     = each.value.gpu_worker || length(each.value.gpu_pci_devices) > 0
     })
   ]
 }

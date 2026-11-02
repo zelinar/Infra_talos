@@ -13,9 +13,11 @@ proxmox_vm_datastore  = "VM-storage"
 # ==============================================================================
 # Talos & Kubernetes Versions
 # ==============================================================================
-talos_version      = "v1.9.4"
-kubernetes_version = "1.32.2"
-cni_provider       = "cilium" # "cilium" or "flannel"
+talos_version        = "v1.9.4"
+kubernetes_version   = "1.32.2"
+cni_provider         = "cilium" # "cilium" or "flannel"
+enable_nvidia_gpu    = true
+nvidia_driver_branch = "lts" # "lts" (required for Pascal Quadro P620 GP107), "production", or "open-production"
 
 # ==============================================================================
 # Cluster & Networking
@@ -65,7 +67,7 @@ longhorn_s3_endpoint       = "" # Optional S3 endpoint for MinIO / Cloudflare R2
 longhorn_s3_access_key     = ""
 longhorn_s3_secret_key     = ""
 
-enable_workloads_appset = false # Set true to deploy Wave 7 workloads (HA CloudNativePG PostgreSQL cluster)
+enable_workloads_appset = true # Deploy Wave 7 workloads (HA CloudNativePG PostgreSQL with pgvector & Local LLM Stack)
 
 # ==============================================================================
 # Cluster Nodes
@@ -84,10 +86,12 @@ nodes = {
     role              = "worker"
     ip                = "10.10.20.111"
     vm_id             = 211
-    cores             = 4
-    memory_mb         = 8192
+    cores             = 6
+    memory_mb         = 16384
     os_disk_size_gb   = 100
     data_disk_size_gb = 0
+    gpu_worker        = true
+    gpu_pci_devices   = [] # e.g. ["0000:01:00", "0000:02:00"] for 2x NVIDIA Quadro P620
   }
   "k8s-talos-worker-02" = {
     role              = "worker"

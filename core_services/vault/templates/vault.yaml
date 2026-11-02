@@ -224,12 +224,12 @@ spec:
           }
       - name: homelab_edit
         rules: |
-          path "homelab/*" {
+          path "{{ $.Values.vault.kvPath | default "internal" }}/*" {
             capabilities = ["create", "read", "update", "delete", "list"]
           }
       - name: homelab_read
         rules: |
-          path "homelab/*" {
+          path "{{ $.Values.vault.kvPath | default "internal" }}/*" {
             capabilities = ["read", "list"]
           }
       - name: metrics_read
@@ -316,9 +316,9 @@ spec:
           {{- end }}
 
     secrets:
-      - path: homelab
+      - path: {{ $.Values.vault.kvPath | default "internal" }}
         type: kv
-        description: Homelab KV v2 secret engine
+        description: Internal KV v2 secret engine
         options:
           version: 2
 

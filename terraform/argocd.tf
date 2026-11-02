@@ -6,6 +6,10 @@ locals {
   argocd_domain = var.argocd_domain != "" ? var.argocd_domain : "argocd.${var.base_domain}"
   traefik_lb_ip = var.traefik_lb_ip != "" ? var.traefik_lb_ip : var.metallb_ip_pool_start
 
+  argocd_admin_password_resolved = var.enable_argocd ? (
+    var.argocd_admin_password != "" ? var.argocd_admin_password : try(data.kubernetes_secret_v1.argocd_initial_admin[0].data["password"], "")
+  ) : ""
+
   argocd_projects = yamldecode(templatefile("${path.module}/../gitops/projects/app-projects.yaml.tftpl", {
     argocd_namespace = var.argocd_namespace
     gitops_repo_url  = var.gitops_repo_url
@@ -29,6 +33,7 @@ locals {
     acme_cloudflare_api_token  = var.acme_cloudflare_api_token
     vault_kv_path              = var.vault_kv_path
     vault_cluster_secret_store = var.vault_cluster_secret_store
+    argocd_admin_password      = local.argocd_admin_password_resolved
     grafana_admin_user         = var.grafana_admin_user
     grafana_admin_password     = var.grafana_admin_password
     alloy_active_token         = var.alloy_active_token
@@ -63,6 +68,8 @@ locals {
     gitops_repo_url            = var.gitops_repo_url
     gitops_repo_revision       = var.gitops_repo_revision
     workloads_path             = var.gitops_workloads_path
+    base_domain                = var.base_domain
+    tls_wildcard_secret_name   = var.tls_wildcard_secret_name
     vault_cluster_secret_store = var.vault_cluster_secret_store
   }))
 

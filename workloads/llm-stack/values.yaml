@@ -1,0 +1,94 @@
+# ==============================================================================
+# Local LLM Stack (Ollama + Open WebUI + NVIDIA GPU Device Plugin)
+# ==============================================================================
+
+gpu:
+  # Deploys RuntimeClass 'nvidia' and the NVIDIA Kubernetes Device Plugin DaemonSet
+  devicePlugin:
+    enabled: true
+    image: "nvcr.io/nvidia/k8s-device-plugin:v0.17.0"
+    nodeSelector:
+      gpu.internal.cloud/nvidia: "true"
+
+ollama:
+  image: "ollama/ollama:0.5.13"
+  port: 11434
+
+  # GPU acceleration settings (tuned for 2x NVIDIA Quadro P620 = 4 GB combined VRAM)
+  # Set enabled: false if testing on CPU-only before physical GPUs are passed through
+  gpu:
+    enabled: true
+    count: 2
+    nodeSelector:
+      gpu.internal.cloud/nvidia: "true"
+
+  # Persistent Longhorn volume for downloaded GGUF models (/root/.ollama)
+  storage:
+    storageClass: "longhorn"
+    size: "50Gi"
+
+  # Models automatically pulled in the background after Ollama starts
+  models:
+    - "nomic-embed-text"   # RAG Vector Embeddings (~275 MB, 100% VRAM)
+    - "llama3.2:3b"        # Fast English Assistant (~2.0 GB, 100% VRAM on 2x P620)
+    - "qwen2.5-coder:3b"   # Fast Coding & DevOps Assistant (~1.9 GB, 100% VRAM on 2x P620)
+    - "qwen2.5-coder:7b"   # Advanced Coding & DevOps (~4.7 GB, ~80% VRAM on 2x P620 + 20% CPU RAM)
+
+  # Tuned for Pascal (GP107 / Compute Capability 6.1) dual-GPU memory pooling
+  env:
+    OLLAMA_KEEP_ALIVE: "24h"
+    OLLAMA_NUM_PARALLEL: "1"
+    OLLAMA_MAX_LOADED_MODELS: "2"
+    OLLAMA_FLASH_ATTENTION: "0"
+
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "4Gi"
+    limits:
+      cpu: "6000m"
+      memory: "12Gi"
+
+openWebui:
+  image: "ghcr.io/open-webui/open-webui:v0.5.20"
+  replicas: 1
+  port: 8080
+
+  defaultLocale: "en-US"
+  defaultModels: "qwen2.5-coder:3b,llama3.2:3b,qwen2.5-coder:7b"
+  ragEmbeddingModel: "nomic-embed-text:latest"
+  enableSignup: true
+
+  # Connects to CloudNativePG (workloads/postgres-cluster) for chat history & pgvector RAG
+  database:
+    enabled: true
+    host: "platform-postgres-rw.postgres-cluster.svc.cluster.local"
+    port: 5432
+    name: "appdb"
+
+  storage:
+    storageClass: "longhorn"
+    size: "10Gi"
+
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+
+# Syncs PostgreSQL credentials from HashiCorp Vault via External Secrets Operator
+credentialsSecret:
+  enabled: true
+  secretStoreName: "vault-homelab"
+  secretStoreKind: "ClusterSecretStore"
+  postgresRemoteKey: "workloads/postgres"
+  secretName: "llm-stack-secrets"
+  refreshInterval: "15m"
+
+ingress:
+  enabled: true
+  ingressClassName: "traefik"
+  host: "chat.internal.cloud"
+  tlsSecretName: "wildcard-homelab-secret"

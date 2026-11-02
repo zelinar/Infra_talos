@@ -87,7 +87,13 @@
                 dockerHubPull:
                   secretStoreName: ${jsonencode(vault_cluster_secret_store)}
               {{- else if eq $name "vault" }}
+              clusterSecretStores:
+                ${vault_cluster_secret_store}:
+                  enabled: true
+                  type: vault
+                  path: ${jsonencode(vault_kv_path)}
               vault:
+                kvPath: ${jsonencode(vault_kv_path)}
                 ingress:
                   domain: ${jsonencode(base_domain)}
                   issuerName: ${jsonencode(tls_issuer_name)}
@@ -95,6 +101,12 @@
                   hosts:
                     - ${jsonencode("vault.${base_domain}")}
                 startupSecrets:
+                  - type: kv
+                    path: ${jsonencode("${vault_kv_path}/data/core/argocd")}
+                    data:
+                      data:
+                        admin-user: "admin"
+                        admin-password: ${jsonencode(argocd_admin_password)}
                   - type: kv
                     path: ${jsonencode("${vault_kv_path}/data/observability/victoria")}
                     data:

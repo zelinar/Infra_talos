@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ollama
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.ollama.port | default 11434 }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ollama
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ollama
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ollama
+spec:
+  serviceName: ollama
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ollama
+    spec:
+      {{- if and .Values.ollama.gpu .Values.ollama.gpu.enabled }}
+      runtimeClassName: nvidia
+      {{- if .Values.ollama.gpu.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.ollama.gpu.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      containers:
+        - name: ollama
+          image: {{ .Values.ollama.image | default "ollama/ollama:0.5.13" | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.ollama.port | default 11434 }}
+              protocol: TCP
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:{{ .Values.ollama.port | default 11434 }}"
+            {{- range $k, $v := .Values.ollama.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if .Values.ollama.models }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    nohup sh -c '
+                      until ollama list >/dev/null 2>&1; do
+                        sleep 2
+                      done
+                      {{- range $model := .Values.ollama.models }}
+                      echo "[ollama-init] Pulling model {{ $model }}..."
+                      ollama pull {{ $model | quote }} || true
+                      {{- end }}
+                      echo "[ollama-init] All configured models are ready."
+                    ' >/proc/1/fd/1 2>&1 &
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: {{ .Values.ollama.resources.requests.cpu | default "1000m" | quote }}
+              memory: {{ .Values.ollama.resources.requests.memory | default "4Gi" | quote }}
+              {{- if and .Values.ollama.gpu .Values.ollama.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.ollama.gpu.count | default 2 | quote }}
+              {{- end }}
+            limits:
+              cpu: {{ .Values.ollama.resources.limits.cpu | default "6000m" | quote }}
+              memory: {{ .Values.ollama.resources.limits.memory | default "12Gi" | quote }}
+              {{- if and .Values.ollama.gpu .Values.ollama.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.ollama.gpu.count | default 2 | quote }}
+              {{- end }}
+          volumeMounts:
+            - name: ollama-models
+              mountPath: /root/.ollama
+  volumeClaimTemplates:
+    - metadata:
+        name: ollama-models
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.ollama.storage.storageClass | default "longhorn" | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.ollama.storage.size | default "50Gi" | quote }}

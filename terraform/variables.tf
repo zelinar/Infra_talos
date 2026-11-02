@@ -78,6 +78,23 @@ variable "talos_system_extensions" {
   ]
 }
 
+variable "enable_nvidia_gpu" {
+  description = "Include NVIDIA GPU drivers and NVIDIA Container Toolkit in the Talos Image Factory schematic"
+  type        = bool
+  default     = true
+}
+
+variable "nvidia_driver_branch" {
+  description = "Talos NVIDIA driver extension variant: 'lts' (proprietary 535.x LTS required for Pascal/Quadro P620 GP107), 'production' (proprietary 550.x), or 'open-production' (open kernel modules for Turing+)"
+  type        = string
+  default     = "lts"
+
+  validation {
+    condition     = contains(["lts", "production", "open-production"], var.nvidia_driver_branch)
+    error_message = "nvidia_driver_branch must be one of: 'lts', 'production', or 'open-production'."
+  }
+}
+
 variable "download_talos_iso" {
   description = "Whether Terraform should automatically download the Talos Factory ISO onto Proxmox"
   type        = bool
@@ -259,7 +276,7 @@ variable "acme_cloudflare_api_token" {
 variable "vault_kv_path" {
   description = "Vault KV v2 mount path used for platform secrets"
   type        = string
-  default     = "homelab"
+  default     = "internal"
 }
 
 variable "vault_cluster_secret_store" {
@@ -414,9 +431,9 @@ variable "enable_argocd_appsets" {
 }
 
 variable "enable_workloads_appset" {
-  description = "Deploy ArgoCD ApplicationSet for optional Wave 7 workloads (e.g. HA CloudNativePG PostgreSQL cluster)"
+  description = "Deploy ArgoCD ApplicationSet for Wave 7 workloads (HA CloudNativePG PostgreSQL with pgvector & Local LLM Stack)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ==============================================================================
@@ -425,16 +442,18 @@ variable "enable_workloads_appset" {
 variable "nodes" {
   description = "Map of Talos cluster nodes (controlplane and worker)"
   type = map(object({
-    role              = string              # "controlplane" or "worker"
-    ip                = string              # Static IPv4 address
-    vm_id             = optional(number)    # Optional explicit Proxmox VMID
-    target_node       = optional(string)    # Optional override for Proxmox node name
-    cores             = optional(number, 4) # CPU cores
-    sockets           = optional(number, 1) # CPU sockets
-    cpu_type          = optional(string, "host")
-    memory_mb         = optional(number, 8192) # RAM in MB
-    os_disk_size_gb   = optional(number, 50)   # OS disk (scsi0 / /dev/sda) in GB
-    data_disk_size_gb = optional(number, 0)    # Optional dedicated Longhorn disk (scsi1 / /dev/sdb) in GB (0 = use OS disk)
+    role              = string                       # "controlplane" or "worker"
+    ip                = string                       # Static IPv4 address
+    vm_id             = optional(number)             # Optional explicit Proxmox VMID
+    target_node       = optional(string)             # Optional override for Proxmox node name
+    cores             = optional(number, 4)          # CPU cores
+    sockets           = optional(number, 1)          # CPU sockets
+    cpu_type          = optional(string, "host")     # "host" exposes AVX2/FMA instructions for hybrid LLM inference
+    memory_mb         = optional(number, 8192)       # RAM in MB
+    os_disk_size_gb   = optional(number, 50)         # OS disk (scsi0 / /dev/sda) in GB
+    data_disk_size_gb = optional(number, 0)          # Optional dedicated Longhorn disk (scsi1 / /dev/sdb) in GB (0 = use OS disk)
+    gpu_worker        = optional(bool, false)        # Label node as GPU worker (gpu.internal.cloud/nvidia=true)
+    gpu_pci_devices   = optional(list(string), [])   # Proxmox PCIe IDs for GPU passthrough (e.g. ["0000:01:00", "0000:02:00"])
     onboot            = optional(bool, true)
   }))
 
@@ -452,10 +471,12 @@ variable "nodes" {
       role              = "worker"
       ip                = "10.10.20.121"
       vm_id             = 211
-      cores             = 4
-      memory_mb         = 8192
+      cores             = 6
+      memory_mb         = 16384
       os_disk_size_gb   = 100
       data_disk_size_gb = 0
+      gpu_worker        = true
+      gpu_pci_devices   = [] # Add your 2x Quadro P620 PCIe addresses here once plugged in, e.g. ["0000:01:00", "0000:02:00"]
     }
     "k8s-talos-worker-02" = {
       role              = "worker"

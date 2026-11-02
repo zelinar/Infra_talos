@@ -2,10 +2,32 @@
 # Talos Image Factory Schematic & Proxmox ISO Download
 # ==============================================================================
 
+locals {
+  nvidia_extensions_map = {
+    lts = [
+      "siderolabs/nonfree-kmod-nvidia-lts",
+      "siderolabs/nvidia-container-toolkit-lts",
+    ]
+    production = [
+      "siderolabs/nonfree-kmod-nvidia-production",
+      "siderolabs/nvidia-container-toolkit-production",
+    ]
+    open-production = [
+      "siderolabs/nvidia-open-gpu-kernel-modules-production",
+      "siderolabs/nvidia-container-toolkit-production",
+    ]
+  }
+
+  effective_talos_extensions = distinct(concat(
+    var.talos_system_extensions,
+    var.enable_nvidia_gpu ? local.nvidia_extensions_map[var.nvidia_driver_branch] : []
+  ))
+}
+
 data "talos_image_factory_extensions_versions" "this" {
   talos_version = var.talos_version
   filters = {
-    names = var.talos_system_extensions
+    names = local.effective_talos_extensions
   }
 }
 

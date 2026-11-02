@@ -1,0 +1,6 @@
+apiVersion: v2
+name: llm-stack
+description: Local AI & LLM Stack (NVIDIA Device Plugin, Ollama Multi-GPU Inference, Open WebUI with PostgreSQL pgvector RAG)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

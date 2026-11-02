@@ -30,6 +30,12 @@
               {{- if eq $name "postgres-cluster" }}
               credentialsSecret:
                 secretStoreName: ${jsonencode(vault_cluster_secret_store)}
+              {{- else if eq $name "llm-stack" }}
+              ingress:
+                host: ${jsonencode("chat.${base_domain}")}
+                tlsSecretName: ${jsonencode(tls_wildcard_secret_name)}
+              credentialsSecret:
+                secretStoreName: ${jsonencode(vault_cluster_secret_store)}
               {{- end }}
         destination:
           server: https://kubernetes.default.svc

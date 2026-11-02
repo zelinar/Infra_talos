@@ -1,11 +1,11 @@
 secrets: {}
 
 clusterSecretStores:
-  # Homelab Vault secret store, bound to /homelab KV v2 engine. K8s ServiceAccount auth.
+  # Internal Vault secret store, bound to /internal KV v2 engine. K8s ServiceAccount auth.
   vault-homelab:
     enabled: true
     type: vault
-    path: homelab
+    path: internal
     auth:
       kubernetes:
         role: vault
@@ -104,28 +104,35 @@ vault:
           - secrets_admin
         ttl: 1h
 
-  # Initial secrets seeded into the 'homelab' KV v2 engine by bank-vaults configurer
+  # Initial secrets seeded into the 'internal' KV v2 engine by bank-vaults configurer
+  kvPath: internal
   startupSecrets:
     - type: kv
-      path: homelab/data/observability/victoria
+      path: internal/data/core/argocd
+      data:
+        data:
+          admin-user: "admin"
+          admin-password: ""
+    - type: kv
+      path: internal/data/observability/victoria
       data:
         data:
           alloy_active_token: "homelab-alloy-collect-token-active"
           victoria_active_token: "homelab-victoria-ingest-token-active"
     - type: kv
-      path: homelab/data/observability/grafana
+      path: internal/data/observability/grafana
       data:
         data:
           admin-user: "admin"
           admin-password: "admin"
     - type: kv
-      path: homelab/data/workloads/postgres
+      path: internal/data/workloads/postgres
       data:
         data:
           username: "appuser"
           password: "homelab-postgres-password"
     - type: kv
-      path: homelab/data/storage/longhorn-s3
+      path: internal/data/storage/longhorn-s3
       data:
         data:
           access_key_id: ""

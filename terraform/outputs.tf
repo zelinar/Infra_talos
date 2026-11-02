@@ -73,6 +73,7 @@ output "platform_urls" {
   description = "Platform service URLs derived from base_domain"
   value = {
     argocd          = "https://${local.argocd_domain}"
+    ai_chat         = "https://chat.${var.base_domain}"
     vault           = "https://vault.${var.base_domain}"
     grafana         = "https://grafana.${var.base_domain}"
     longhorn        = "https://longhorn.${var.base_domain}"
