@@ -33,7 +33,7 @@ machine:
       partitions:
         - mountpoint: /var/lib/longhorn
 %{ endif ~}
-%{ if enable_nvidia_gpu && is_gpu_worker ~}
+%{ if enable_nvidia_gpu && has_gpu ~}
   kernel:
     modules:
       - name: nvidia

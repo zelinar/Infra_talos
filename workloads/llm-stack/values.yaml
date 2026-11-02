@@ -15,9 +15,9 @@ ollama:
   port: 11434
 
   # GPU acceleration settings (tuned for 2x NVIDIA Quadro P620 = 4 GB combined VRAM)
-  # Set enabled: false if testing on CPU-only before physical GPUs are passed through
+  # Set enabled: true once physical GPUs are passed through via gpu_pci_devices in Terraform
   gpu:
-    enabled: true
+    enabled: false
     count: 2
     nodeSelector:
       gpu.internal.cloud/nvidia: "true"

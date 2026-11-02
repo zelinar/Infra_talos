@@ -80,6 +80,7 @@ data "talos_machine_configuration" "worker" {
       service_subnet    = var.service_subnet
       has_data_disk     = each.value.data_disk_size_gb > 0
       enable_nvidia_gpu = var.enable_nvidia_gpu
+      has_gpu           = length(each.value.gpu_pci_devices) > 0
       is_gpu_worker     = each.value.gpu_worker || length(each.value.gpu_pci_devices) > 0
     })
   ]
