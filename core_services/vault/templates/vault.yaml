@@ -1,0 +1,355 @@
+apiVersion: "vault.banzaicloud.com/v1alpha1"
+kind: "Vault"
+metadata:
+  name: "vault"
+  annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+
+spec:
+  size: {{ int $.Values.vault.replicaCount }}
+  image: {{ $.Values.vault.image.registry }}/{{ $.Values.vault.image.repository }}:{{ $.Values.vault.image.tag }}
+
+  resources:
+  {{- if $.Values.vault.resources }}
+    vault:
+      {{- toYaml $.Values.vault.resources | nindent 6 }}
+  {{- end }}
+
+  {{- with $.Values.vault.image.imagePullSecrets }}
+  vaultPodSpec:
+    imagePullSecrets:
+      {{- . | toYaml | nindent 6 }}
+  {{- end }}
+
+  {{- with $.Values.vault.commonAnnotations }}
+  annotations:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+
+  {{- with $.Values.vault.vaultAnnotations }}
+  vaultAnnotations:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+
+  {{- with $.Values.vault.affinity }}
+  affinity:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+
+  {{- with $.Values.vault.nodeSelector }}
+  nodeSelector:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+
+  {{- with $.Values.vault.tolerations }}
+  tolerations:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+
+  serviceAccount: {{ $.Values.bankvaults.serviceAccount.name }}
+  serviceType: {{ $.Values.vault.service.type }}
+
+  ingress:
+    {{- if $.Values.vault.ingress.annotations }}
+    annotations:
+      {{- $.Values.vault.ingress.annotations | toYaml | nindent 6 }}
+    {{- end }}
+    spec:
+      defaultBackend:
+        service:
+          name: {{ $.Values.vault.service.name }}
+          port:
+            number: {{ $.Values.vault.service.port }}
+      ingressClassName: {{ $.Values.vault.ingress.className }}
+      rules:
+      {{- with $.Values.vault.ingress }}
+      {{- range .hosts }}
+        - host: {{ . }}
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: {{ $.Values.vault.service.name }}
+                    port:
+                      number: {{ $.Values.vault.service.port }}
+                path: /
+                pathType: Prefix
+      {{- end }}
+      {{- $tlsSecretName := .tlsSecretName }}
+      {{- with .hosts }}
+      tls:
+        - hosts:
+          {{- toYaml . | nindent 10 }}
+          secretName: {{ $tlsSecretName }}
+      {{- end }}
+      {{- end }}
+
+  volumes:
+    - name: {{ $.Release.Name }}-file
+      persistentVolumeClaim:
+        claimName: {{ $.Release.Name }}-file
+    {{- if $.Values.vault.storage.additionalVolumes }}
+    {{- $.Values.vault.storage.additionalVolumes | toYaml | nindent 4 }}
+    {{- end }}
+
+  volumeMounts:
+    - name: {{ $.Release.Name }}-file
+      mountPath: /vault/file
+    {{- if $.Values.vault.storage.additionalVolumeMounts }}
+    {{- $.Values.vault.storage.additionalVolumeMounts | toYaml | nindent 4 }}
+    {{- end }}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $.Release.Name }}-file
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: {{ $.Values.vault.storage.pvc.size }}
+
+  vaultEnvsConfig:
+    - name: VAULT_LOG_LEVEL
+      value: info
+    - name: VAULT_STORAGE_FILE
+      value: "/vault/file"
+
+  unsealConfig:
+    options:
+      preFlightChecks: true
+      storeRootToken: true
+      secretShares: 5
+      secretThreshold: 3
+    kubernetes:
+      secretNamespace: {{ $.Release.Namespace }}
+
+  {{- if and $.Values.vault.metrics $.Values.vault.metrics.serviceMonitorEnabled }}
+  serviceMonitorEnabled: true
+  {{- end }}
+
+  config:
+    storage:
+      {{- if eq (int $.Values.vault.replicaCount) 1 }}
+      file:
+      {{- else }}
+      raft:
+      {{- end }}
+        path: "${ .Env.VAULT_STORAGE_FILE }"
+    listener:
+      tcp:
+        address: "0.0.0.0:{{ $.Values.vault.service.port }}"
+        tls_cert_file: /vault/tls/server.crt
+        tls_key_file: /vault/tls/server.key
+        {{- if $.Values.vault.metrics.enabled }}
+        telemetry:
+          unauthenticated_metrics_access: true
+        {{- end }}
+    {{- if gt (int $.Values.vault.replicaCount) 1 }}
+    api_addr: https://{{ $.Values.vault.service.name }}.{{ .Release.Namespace }}:{{ $.Values.vault.service.port }}
+    cluster_addr: "https://${.Env.POD_NAME}:8201"
+    {{- end }}
+    telemetry:
+      prometheus_retention_time: {{ $.Values.vault.metrics.retention }}
+      disable_hostname: true
+    ui: true
+    disable_mlock: true
+
+  externalConfig:
+    policies:
+      - name: default
+        rules: |
+          path "auth/token/lookup-self" {
+            capabilities = ["read"]
+          }
+          path "auth/token/renew-self" {
+            capabilities = ["update"]
+          }
+          path "auth/token/revoke-self" {
+            capabilities = ["update"]
+          }
+          path "auth/*" {
+            capabilities = ["read", "list"]
+          }
+          path "identity/lookup/entity" {
+            capabilities = ["read", "update"]
+          }
+          path "identity/entity/id/*" {
+            capabilities = ["read"]
+          }
+          path "identity/entity/name/*" {
+            capabilities = ["read"]
+          }
+          path "sys/internal/ui/mounts" {
+            capabilities = ["read"]
+          }
+          path "sys/capabilities-self" {
+            capabilities = ["read", "list", "update"]
+          }
+          path "sys/internal/ui/resultant-acl" {
+            capabilities = ["read"]
+          }
+          path "cubbyhole/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
+          path "sys/wrapping/wrap" {
+            capabilities = ["update"]
+          }
+          path "sys/wrapping/unwrap" {
+            capabilities = ["update"]
+          }
+          path "sys/wrapping/lookup" {
+            capabilities = ["update"]
+          }
+          path "sys/tools/hash" {
+            capabilities = ["update"]
+          }
+          path "sys/tools/hash/*" {
+            capabilities = ["update"]
+          }
+          path "sys/policies/acl/*" {
+            capabilities = ["list", "read"]
+          }
+      - name: admin
+        rules: |
+          path "sys/internal/ui/mounts" {
+            capabilities = ["read"]
+          }
+          path "sys/internal/ui/resultant-acl" {
+            capabilities = ["read"]
+          }
+          path "*" {
+            capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+          }
+      - name: homelab_edit
+        rules: |
+          path "homelab/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
+      - name: homelab_read
+        rules: |
+          path "homelab/*" {
+            capabilities = ["read", "list"]
+          }
+      - name: metrics_read
+        rules: |
+          path "sys/metrics" {
+            capabilities = ["read", "list"]
+          }
+      - name: pki_admin
+        rules: |
+          path "pki/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
+      - name: pki_list
+        rules: |
+          path "pki/*" {
+            capabilities = ["list"]
+          }
+      - name: pki_read
+        rules: |
+          path "pki/*" {
+            capabilities = ["list", "read"]
+          }
+      - name: secrets_admin
+        rules: |
+          path "secret/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
+      - name: secrets_list
+        rules: |
+          path "secret/*" {
+            capabilities = ["list"]
+          }
+      - name: secrets_read
+        rules: |
+          path "secret/*" {
+            capabilities = ["list", "read"]
+          }
+
+    auth:
+      - type: kubernetes
+        roles:
+          # Base role allowing External Secrets Operator / vault-sa to read & manage homelab and secret KV stores
+          - name: {{ $.Release.Namespace }}
+            bound_service_account_names:
+              - {{ $.Values.bankvaults.serviceAccount.name | quote }}
+              - "external-secrets"
+            bound_service_account_namespaces:
+              - {{ $.Release.Namespace | quote }}
+              - "external-secrets"
+            policies:
+              - pki_read
+              - secrets_read
+              - secrets_list
+              - homelab_read
+              - homelab_edit
+            ttl: 1h
+          {{- if $.Values.vault.metrics.enabled }}
+          - name: metrics
+            bound_service_account_names:
+              - {{ $.Values.vault.metrics.serviceAccount.name | quote }}
+            bound_service_account_namespaces:
+              - {{ $.Values.vault.metrics.serviceAccount.namespace | quote }}
+            policies:
+              - metrics_read
+            ttl: 1h
+          {{- end }}
+          {{- with $.Values.vault.kubernetes }}
+          {{- range .roles }}
+          - name: {{ .name }}
+            {{- with .bound_service_account_names }}
+            bound_service_account_names:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .bound_service_account_namespaces }}
+            bound_service_account_namespaces:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .policies }}
+            policies:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            ttl: {{ .ttl }}
+          {{- end }}
+          {{- end }}
+
+    secrets:
+      - path: homelab
+        type: kv
+        description: Homelab KV v2 secret engine
+        options:
+          version: 2
+
+      - path: secret
+        type: kv
+        description: General secrets.
+        options:
+          version: 2
+
+      - path: pki
+        type: pki
+        description: Vault PKI Backend
+        config:
+          default_lease_ttl: 168h
+          max_lease_ttl: 720h
+        configuration:
+          config:
+            - name: urls
+              issuing_certificates: https://{{ $.Values.vault.service.name }}.{{ .Release.Namespace }}:{{ $.Values.vault.service.port }}/v1/pki/ca
+              crl_distribution_points: https://{{ $.Values.vault.service.name }}.{{ .Release.Namespace }}:{{ $.Values.vault.service.port }}/v1/pki/crl
+          root/generate:
+            - name: internal
+              common_name: vault.{{ $.Release.Namespace }}
+          roles:
+            - name: default
+              allowed_domains: localhost,pod,svc,default
+              allow_subdomains: true
+              generate_lease: true
+              ttl: 1m
+
+    {{- with $.Values.vault.startupSecrets }}
+    startupSecrets:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}

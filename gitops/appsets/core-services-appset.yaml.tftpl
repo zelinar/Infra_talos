@@ -19,14 +19,14 @@
           # Ordered Sync Waves prevent CRD and webhook race conditions:
           # Wave 1: Foundational CRDs & Controllers (cert-manager, metallb, metrics-server)
           # Wave 2: Issuers, IP Pools, Storage, DB Operators (homelab-tls, metallb-custom-ip-pool, longhorn, cnpg-operator, trust-manager, external-secrets)
-          # Wave 3: Ingress & DNS (traefik, external-dns)
+          # Wave 3: Ingress, DNS & Secret Vault (traefik, external-dns, vault)
           argocd.argoproj.io/sync-wave: >-
             {{- $name := .path.basename -}}
             {{- if or (eq $name "cert-manager") (eq $name "metallb") (eq $name "metrics-server") -}}
               1
             {{- else if or (eq $name "homelab-tls") (eq $name "trust-manager") (eq $name "metallb-custom-ip-pool") (eq $name "longhorn") (eq $name "cnpg-operator") (eq $name "external-secrets") -}}
               2
-            {{- else if or (eq $name "traefik") (eq $name "external-dns") -}}
+            {{- else if or (eq $name "traefik") (eq $name "external-dns") (eq $name "vault") -}}
               3
             {{- else -}}
               4

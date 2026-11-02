@@ -1,0 +1,10 @@
+apiVersion: v2
+name: external-secrets
+description: External Secrets Operator for Homelab Kubernetes Cluster
+type: application
+version: 1.0.0
+
+dependencies:
+  - name: external-secrets
+    version: 0.16.2
+    repository: https://charts.external-secrets.io

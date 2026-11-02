@@ -4,19 +4,33 @@ victoria-common:
   # Built-in Kubernetes Secrets for Homelab (used when ExternalSecrets / Vault is not deployed).
   # Provides the exact same token secrets used by Alloy -> VMAuth -> VMAgent/VLAgent -> VMAuth -> VMCluster/VLCluster.
   staticSecrets:
-    enabled: true
+    enabled: false
     alloyActiveToken: "homelab-alloy-collect-token-active"
     victoriaActiveToken: "homelab-victoria-ingest-token-active"
 
-  # Vault / ExternalSecrets integration (enable if external-secrets + Vault are deployed)
+  # Vault / ExternalSecrets integration (synced from Vault KV v2 'homelab' space via vault-homelab ClusterSecretStore)
   credentialsSecret:
-    enabled: false
-    secretStoreName: vault-platform-kv
+    enabled: true
+    secretStoreName: vault-homelab
     secretStoreKind: ClusterSecretStore
-    remoteKeyPrefix: "monitoring/homelab/victoria/internal_auth"
+    remoteKeyPrefix: "observability/victoria"
     refreshInterval: "10m"
     annotations: {}
-    items: []
+    items:
+      - name: alloy-active-token
+        data:
+          - secretKey: token
+            remoteProperty: alloy_active_token
+      - name: victoria-active-token
+        data:
+          - secretKey: token
+            remoteProperty: victoria_active_token
+      - name: victoria-internal-auth-tokens
+        data:
+          - secretKey: collect_active_token
+            remoteProperty: alloy_active_token
+          - secretKey: ingest_active_token
+            remoteProperty: victoria_active_token
     extraItems: []
 
   ingress:

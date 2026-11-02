@@ -1,0 +1,51 @@
+clusterSecretStores: {}
+
+clusterSecrets:
+  # Optional cluster-wide Docker Hub pull secret (synced from vault-homelab when enabled)
+  dockerHubPull:
+    enabled: false
+    secretStoreName: vault-homelab
+    secretStoreKind: ClusterSecretStore
+    items:
+      - name: dockerhub-image-pull-secret
+        targetTemplate:
+          engineVersion: v2
+          type: kubernetes.io/dockerconfigjson
+          data:
+            .dockerconfigjson: '{"auths":{"index.docker.io":{"auth":"{{ printf "%s:%s" .username .token | b64enc}}"}}}'
+        data:
+          - secretKey: username
+            remoteKey: core/dockerhub
+            remoteProperty: username
+          - secretKey: token
+            remoteKey: core/dockerhub
+            remoteProperty: token
+
+external-secrets:
+  installCRDs: true
+
+  # external-secrets operator resources
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 80Mi
+
+  # external-secrets webhook resources
+  webhook:
+    resources:
+      limits:
+        memory: 64Mi
+      requests:
+        cpu: 5m
+        memory: 48Mi
+
+  # external-secrets cert controller resources
+  certController:
+    resources:
+      limits:
+        memory: 64Mi
+      requests:
+        cpu: 5m
+        memory: 56Mi

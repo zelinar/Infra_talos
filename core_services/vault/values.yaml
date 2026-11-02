@@ -1,0 +1,117 @@
+secrets: {}
+
+clusterSecretStores:
+  # Homelab Vault secret store, bound to /homelab KV v2 engine. K8s ServiceAccount auth.
+  vault-homelab:
+    enabled: true
+    type: vault
+    path: homelab
+    auth:
+      kubernetes:
+        role: vault
+        serviceAccountRef:
+          name: vault-sa
+          namespace: vault
+
+  # General Vault secret store, bound to /secret KV v2 engine. K8s ServiceAccount auth.
+  vault:
+    enabled: true
+    type: vault
+    path: secret
+    auth:
+      kubernetes:
+        role: vault
+        serviceAccountRef:
+          name: vault-sa
+          namespace: vault
+
+# Values for bank-vaults vault-operator and vault-configurer
+bankvaults:
+  revisionHistoryLimit: 2
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  nodeSelector:
+    kubernetes.io/os: linux
+  serviceAccount:
+    create: true
+    name: vault-sa
+
+# Values for Vault CR
+vault:
+  replicaCount: 1
+  image:
+    registry: docker.io
+    repository: hashicorp/vault
+    tag: 1.21.4
+
+  # Ingress configuration exposed via Traefik
+  ingress:
+    className: traefik
+    hosts:
+      - vault.homelab.cloud
+    tlsSecretName: wildcard-homelab-secret
+
+  # Resources for vault container
+  resources:
+    limits:
+      memory: 384Mi
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+  # Annotations applied to Vault Service/Ingress managed by Bank-Vaults Operator
+  vaultAnnotations:
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: vault-skip-cert-verification@kubernetescrd
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  service:
+    type: ClusterIP
+    name: vault
+    port: 8200
+
+  storage:
+    pvc:
+      size: 2Gi
+
+  metrics:
+    enabled: true
+    serviceMonitorEnabled: false
+    retention: 12h
+    serviceAccount:
+      name: grafana-alloy
+      namespace: monitoring
+
+  # Additional Kubernetes auth roles (optional)
+  kubernetes:
+    roles:
+      - name: argocd
+        bound_service_account_names:
+          - argocd-server
+        bound_service_account_namespaces:
+          - argocd
+        policies:
+          - homelab_edit
+          - secrets_admin
+        ttl: 1h
+
+  # Initial secrets seeded into the 'homelab' KV v2 engine by bank-vaults configurer
+  startupSecrets:
+    - type: kv
+      path: homelab/data/observability/victoria
+      data:
+        data:
+          alloy_active_token: "homelab-alloy-collect-token-active"
+          victoria_active_token: "homelab-victoria-ingest-token-active"
+    - type: kv
+      path: homelab/data/observability/grafana
+      data:
+        data:
+          admin-user: "admin"
+          admin-password: "admin"

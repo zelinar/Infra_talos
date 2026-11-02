@@ -1,0 +1,11 @@
+apiVersion: v2
+name: vault
+description: Deploys Bank-Vaults vault-operator, Homelab Vault instance, and ClusterSecretStores
+type: application
+version: 1.0.0
+
+dependencies:
+  - name: vault-operator
+    alias: bankvaults
+    version: 1.23.4
+    repository: oci://ghcr.io/bank-vaults/helm-charts
