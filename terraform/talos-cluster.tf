@@ -71,7 +71,7 @@ data "talos_machine_configuration" "worker" {
   config_patches = [
     templatefile("${path.module}/templates/worker-patch.yaml.tftpl", {
       hostname          = each.key
-      installer_image   = local.talos_installer_image
+      installer_image   = (var.enable_nvidia_gpu && length(each.value.gpu_pci_devices) > 0) ? local.talos_gpu_installer_image : local.talos_installer_image
       ip                = each.value.ip
       cidr_prefix       = var.network_cidr_prefix
       gateway           = var.network_gateway
@@ -81,7 +81,7 @@ data "talos_machine_configuration" "worker" {
       has_data_disk     = each.value.data_disk_size_gb > 0
       enable_nvidia_gpu = var.enable_nvidia_gpu
       has_gpu           = length(each.value.gpu_pci_devices) > 0
-      is_gpu_worker     = each.value.gpu_worker || length(each.value.gpu_pci_devices) > 0
+      is_gpu_worker     = var.enable_nvidia_gpu && length(each.value.gpu_pci_devices) > 0
     })
   ]
 }
@@ -92,6 +92,12 @@ resource "talos_machine_configuration_apply" "controlplane" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.controlplane[each.key].machine_configuration
   node                        = each.value.ip
+
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.talos_node[each.key]
+    ]
+  }
 
   depends_on = [
     proxmox_virtual_environment_vm.talos_node
@@ -105,6 +111,12 @@ resource "talos_machine_configuration_apply" "worker" {
   machine_configuration_input = data.talos_machine_configuration.worker[each.key].machine_configuration
   node                        = each.value.ip
 
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.talos_node[each.key]
+    ]
+  }
+
   depends_on = [
     proxmox_virtual_environment_vm.talos_node
   ]
@@ -113,6 +125,12 @@ resource "talos_machine_configuration_apply" "worker" {
 resource "talos_machine_bootstrap" "this" {
   client_configuration = talos_machine_secrets.this.client_configuration
   node                 = local.primary_control_plane_ip
+
+  lifecycle {
+    replace_triggered_by = [
+      talos_machine_configuration_apply.controlplane,
+    ]
+  }
 
   depends_on = [
     talos_machine_configuration_apply.controlplane
@@ -140,6 +158,57 @@ resource "local_sensitive_file" "talosconfig" {
   file_permission = "0600"
 }
 
+# Automatically upgrade existing GPU worker nodes to the Talos GPU schematic image
+# (installs nonfree-kmod-nvidia-lts and nvidia-container-toolkit-lts without manual talosctl steps)
+resource "terraform_data" "worker_gpu_schematic_upgrade" {
+  for_each = {
+    for k, v in local.worker_nodes : k => v
+    if var.enable_nvidia_gpu && length(v.gpu_pci_devices) > 0
+  }
+
+  triggers_replace = [
+    local.talos_gpu_installer_image,
+    join(",", each.value.gpu_pci_devices),
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      BIN_DIR="${path.module}/.terraform/bin"
+      TALOSCTL="$BIN_DIR/talosctl"
+      if command -v talosctl >/dev/null 2>&1; then
+        TALOSCTL="$(command -v talosctl)"
+      elif [ ! -x "$TALOSCTL" ]; then
+        echo "Downloading talosctl ${var.talos_version} to $TALOSCTL..."
+        mkdir -p "$BIN_DIR"
+        curl -fsSL -o "$TALOSCTL" "https://github.com/siderolabs/talos/releases/download/${var.talos_version}/talosctl-linux-amd64"
+        chmod +x "$TALOSCTL"
+      fi
+
+      echo "Waiting for Talos API on ${each.key} (${each.value.ip}:50000) to be reachable..."
+      for i in $(seq 1 60); do
+        if "$TALOSCTL" --talosconfig="${local_sensitive_file.talosconfig.filename}" version --nodes "${each.value.ip}" --endpoints "${local.primary_control_plane_ip}" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 3
+      done
+
+      echo "Upgrading GPU worker ${each.key} (${each.value.ip}) to Talos GPU schematic (${local.talos_gpu_installer_image})..."
+      "$TALOSCTL" --talosconfig="${local_sensitive_file.talosconfig.filename}" upgrade \
+        --nodes "${each.value.ip}" \
+        --endpoints "${local.primary_control_plane_ip}" \
+        --image "${local.talos_gpu_installer_image}" \
+        --wait=true
+    EOT
+  }
+
+  depends_on = [
+    proxmox_virtual_environment_vm.talos_node,
+    talos_machine_configuration_apply.worker,
+    local_sensitive_file.talosconfig,
+  ]
+}
+
 # Wait for all Talos nodes to finish disk install, reboot, and start etcd & kubelet
 data "talos_cluster_health" "this" {
   client_configuration   = data.talos_client_configuration.this.client_configuration
@@ -156,6 +225,7 @@ data "talos_cluster_health" "this" {
     talos_machine_bootstrap.this,
     talos_machine_configuration_apply.controlplane,
     talos_machine_configuration_apply.worker,
+    terraform_data.worker_gpu_schematic_upgrade,
   ]
 }
 

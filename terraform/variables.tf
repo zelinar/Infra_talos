@@ -95,6 +95,27 @@ variable "nvidia_driver_branch" {
   }
 }
 
+variable "gpu_pci_hardware_metadata" {
+  description = "Proxmox PCI hardware metadata map keyed by PCI path (e.g. '0000:06:00') used to automatically create Proxmox 8 PCI Resource Mappings via API token"
+  type = map(object({
+    id           = string # Vendor:Device ID (e.g. "10de:1cb6" for NVIDIA Quadro P620)
+    subsystem_id = string # Subsystem Vendor:Device ID (e.g. "103c:1264")
+    iommu_group  = number # Host IOMMU group number
+  }))
+  default = {
+    "0000:06:00" = {
+      id           = "10de:1cb6"
+      subsystem_id = "103c:1264"
+      iommu_group  = 7
+    }
+    "0000:af:00" = {
+      id           = "10de:1cb6"
+      subsystem_id = "103c:1264"
+      iommu_group  = 16
+    }
+  }
+}
+
 variable "download_talos_iso" {
   description = "Whether Terraform should automatically download the Talos Factory ISO onto Proxmox"
   type        = bool
@@ -476,7 +497,7 @@ variable "nodes" {
       os_disk_size_gb   = 100
       data_disk_size_gb = 0
       gpu_worker        = true
-      gpu_pci_devices   = [] # Add your 2x Quadro P620 PCIe addresses here once plugged in, e.g. ["0000:01:00", "0000:02:00"]
+      gpu_pci_devices   = ["0000:06:00", "0000:af:00"] # Add your 2x Quadro P620 PCIe addresses here once plugged in, e.g. ["0000:01:00", "0000:02:00"]
     }
     "k8s-talos-worker-02" = {
       role              = "worker"

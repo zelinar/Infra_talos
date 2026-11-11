@@ -1,16 +1,51 @@
 # ==============================================================================
-# Proxmox Virtual Machines for Talos Nodes
+# Proxmox PCI Hardware Mappings & Virtual Machines for Talos Nodes
 # ==============================================================================
+
+locals {
+  node_gpu_mappings = merge([
+    for node_key, node in var.nodes : {
+      for idx, pci_path in node.gpu_pci_devices :
+      "${node_key}-${idx}" => {
+        node_key     = node_key
+        idx          = idx
+        pve_node     = coalesce(node.target_node, var.proxmox_node)
+        path         = pci_path
+        id           = lookup(var.gpu_pci_hardware_metadata, pci_path, { id = "10de:1cb6", subsystem_id = "103c:1264", iommu_group = 0 }).id
+        subsystem_id = lookup(var.gpu_pci_hardware_metadata, pci_path, { id = "10de:1cb6", subsystem_id = "103c:1264", iommu_group = 0 }).subsystem_id
+        iommu_group  = lookup(var.gpu_pci_hardware_metadata, pci_path, { id = "10de:1cb6", subsystem_id = "103c:1264", iommu_group = 0 }).iommu_group
+      }
+    }
+  ]...)
+}
+
+resource "proxmox_virtual_environment_hardware_mapping_pci" "gpu" {
+  for_each = local.node_gpu_mappings
+
+  name    = "gpu-${each.key}"
+  comment = "Managed by Terraform: GPU #${each.value.idx} (${each.value.path}) for ${each.value.node_key}"
+
+  map = [
+    {
+      id           = each.value.id
+      iommu_group  = each.value.iommu_group
+      node         = each.value.pve_node
+      path         = each.value.path
+      subsystem_id = each.value.subsystem_id
+    }
+  ]
+}
 
 resource "proxmox_virtual_environment_vm" "talos_node" {
   for_each = var.nodes
 
-  name            = each.key
-  description     = "Talos Linux ${var.talos_version} (${each.value.role}) - Cluster: ${var.cluster_name}"
-  node_name       = coalesce(each.value.target_node, var.proxmox_node)
-  vm_id           = each.value.vm_id
-  on_boot         = each.value.onboot
-  stop_on_destroy = true
+  name                = each.key
+  description         = "Talos Linux ${var.talos_version} (${each.value.role}) - Cluster: ${var.cluster_name}"
+  node_name           = coalesce(each.value.target_node, var.proxmox_node)
+  vm_id               = each.value.vm_id
+  on_boot             = each.value.onboot
+  reboot_after_update = true
+  stop_on_destroy     = true
 
   tags = ["talos", "kubernetes", var.cluster_name, each.value.role]
 
@@ -72,15 +107,15 @@ resource "proxmox_virtual_environment_vm" "talos_node" {
     }
   }
 
-  # Optional PCIe GPU Passthrough (e.g. 2x NVIDIA Quadro P620 -> hostpci0, hostpci1)
+  # PCIe GPU Passthrough via Terraform-managed Proxmox 8 PCI Resource Mappings
   dynamic "hostpci" {
     for_each = each.value.gpu_pci_devices
     content {
-      device = "hostpci${hostpci.key}"
-      id     = hostpci.value
-      pcie   = true
-      rombar = true
-      xvga   = false
+      device  = "hostpci${hostpci.key}"
+      mapping = proxmox_virtual_environment_hardware_mapping_pci.gpu["${each.key}-${hostpci.key}"].name
+      pcie    = true
+      rombar  = true
+      xvga    = false
     }
   }
 

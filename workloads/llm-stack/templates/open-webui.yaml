@@ -59,10 +59,22 @@ spec:
           env:
             - name: OLLAMA_BASE_URL
               value: "http://ollama.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.ollama.port | default 11434 }}"
+            - name: ENABLE_OPENAI_API
+              value: "false"
+            - name: OFFLINE_MODE
+              value: "true"
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: SCARF_NO_ANALYTICS
+              value: "true"
+            - name: DO_NOT_TRACK
+              value: "true"
+            - name: ANONYMIZED_TELEMETRY
+              value: "false"
             - name: DEFAULT_LOCALE
               value: {{ .Values.openWebui.defaultLocale | default "en-US" | quote }}
             - name: DEFAULT_MODELS
-              value: {{ .Values.openWebui.defaultModels | default "qwen2.5-coder:3b,llama3.2:3b,qwen2.5-coder:7b" | quote }}
+              value: {{ .Values.openWebui.defaultModels | default "qwen2.5-coder:3b" | quote }}
             - name: ENABLE_SIGNUP
               value: {{ .Values.openWebui.enableSignup | default true | quote }}
             - name: RAG_EMBEDDING_ENGINE

@@ -27,6 +27,11 @@ output "talos_installer_image" {
   value       = local.talos_installer_image
 }
 
+output "talos_gpu_installer_image" {
+  description = "Talos GPU installer container image (includes nonfree-kmod-nvidia-lts and nvidia-container-toolkit-lts)"
+  value       = local.talos_gpu_installer_image
+}
+
 output "node_ips" {
   description = "Map of cluster node names to their static IPv4 addresses and roles"
   value = {
