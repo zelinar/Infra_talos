@@ -1,3 +1,7 @@
+# ==============================================================================
+# CloudNativePG HA PostgreSQL Cluster (with pgvector)
+# ==============================================================================
+
 clusterName: "platform-postgres"
 instances: 2
 imageName: "ghcr.io/cloudnative-pg/postgresql:16.6"
@@ -14,16 +18,19 @@ storage:
 
 resources:
   requests:
-    cpu: "100m"
-    memory: "256Mi"
+    cpu: 100m
+    memory: 256Mi
   limits:
     cpu: "1"
-    memory: "1Gi"
+    memory: 1Gi
 
 monitoring:
   enablePodMonitor: true
 
-# Sync database owner credentials from HashiCorp Vault via External Secrets Operator
+# ==============================================================================
+# Vault / External Secrets Integration ('internal' KV v2 Engine)
+# ==============================================================================
+
 credentialsSecret:
   enabled: true
   secretStoreName: "vault-homelab"
@@ -32,12 +39,15 @@ credentialsSecret:
   secretName: "platform-postgres-app-creds"
   refreshInterval: "15m"
 
-# Optional S3 continuous WAL archiving & scheduled backups (Barman Cloud)
+# ==============================================================================
+# Optional S3 Continuous WAL Archiving & Barman Cloud Scheduled Backups
+# ==============================================================================
+
 backup:
   enabled: false
   destinationPath: "s3://homelab-backups/cnpg/"
   endpointURL: ""
-  s3CredentialsSecretName: "longhorn-s3-credentials"
+  s3CredentialsSecretName: "postgres-s3-credentials"
   accessKeyIdKey: "AWS_ACCESS_KEY_ID"
   secretAccessKeyKey: "AWS_SECRET_ACCESS_KEY"
   retentionPolicy: "14d"

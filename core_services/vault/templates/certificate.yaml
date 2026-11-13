@@ -1,4 +1,4 @@
-{{- if and $.Values.vault.ingress $.Values.vault.ingress.tlsSecretName }}
+{{- if and $.Values.vault.ingress $.Values.vault.ingress.createCertificate $.Values.vault.ingress.tlsSecretName }}
 {{- $domain := $.Values.vault.ingress.domain | default "internal.cloud" -}}
 apiVersion: cert-manager.io/v1
 kind: Certificate

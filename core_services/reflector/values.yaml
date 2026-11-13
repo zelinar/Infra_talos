@@ -1,0 +1,16 @@
+# ==============================================================================
+# Emberstack Reflector (Cross-Namespace Secret & ConfigMap Mirroring)
+# ==============================================================================
+
+reflector:
+  enabled: true
+
+  # Optional registry pull secrets (enable if clusterSecrets.dockerHubPull is active in external-secrets)
+  imagePullSecrets: []
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 128Mi
+    limits:
+      memory: 208Mi

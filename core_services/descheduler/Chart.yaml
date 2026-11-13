@@ -1,0 +1,12 @@
+apiVersion: v2
+name: descheduler
+description: Kubernetes Descheduler CronJob for balanced pod placement across cluster nodes
+type: application
+version: 1.0.0
+appVersion: "v0.34.0"
+
+dependencies:
+  - name: descheduler
+    version: 0.34.0
+    repository: https://kubernetes-sigs.github.io/descheduler
+    condition: descheduler.enabled

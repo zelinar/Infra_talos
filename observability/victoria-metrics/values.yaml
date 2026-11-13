@@ -1,8 +1,13 @@
+# ==============================================================================
+# VictoriaMetrics VMCluster (vmstorage, vmselect, vminsert)
+# ==============================================================================
+
 victoria-metrics:
   ingress:
     enabled: false
     ingressDomain: "internal.cloud"
-    className: traefik
+    className: "traefik"
+    tlsSecretName: "wildcard-homelab-secret"
     setNamespace: false
     namePrefix: ""
     annotations: {}
@@ -10,12 +15,12 @@ victoria-metrics:
 
   vmcluster:
     enabled: true
-    name: vmcluster
+    name: "vmcluster"
     setNamespace: false
     annotations: {}
 
     spec:
-      retentionPeriod: "1"
+      retentionPeriod: "30d"
       replicationFactor: 2
 
       vmstorage:
@@ -25,10 +30,10 @@ victoria-metrics:
           volumeClaimTemplate:
             spec:
               accessModes: ["ReadWriteOnce"]
-              storageClassName: longhorn
+              storageClassName: "longhorn"
               resources:
                 requests:
-                  storage: 15Gi
+                  storage: "15Gi"
         resources:
           requests:
             cpu: 100m
@@ -56,10 +61,10 @@ victoria-metrics:
           volumeClaimTemplate:
             spec:
               accessModes: ["ReadWriteOnce"]
-              storageClassName: longhorn
+              storageClassName: "longhorn"
               resources:
                 requests:
-                  storage: 5Gi
+                  storage: "5Gi"
         resources:
           requests:
             cpu: 50m

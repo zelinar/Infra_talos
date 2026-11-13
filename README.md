@@ -73,15 +73,17 @@ flowchart TB
 | :---: | :--- | :--- | :--- |
 | **Wave 1** | `cert-manager` (`v1.20.1`) | `cert-manager` | Issues certificates and seeds the `homelab-ca-secret` Root CA. |
 | **Wave 1** | `metallb` (`0.15.2`) | `metallb-system` | Bare-metal LoadBalancer controller & L2 ARP speaker. |
-| **Wave 1** | `metrics-server` (`3.13.0`) | `kube-system` | Kubernetes resource metrics API (`kubectl top`). |
-| **Wave 2** | `homelab-tls` (`0.1.0`) | `cert-manager` | Creates `ClusterIssuer/homelab-ca-issuer` and wildcard certificates (`wildcard-homelab-secret` for `*.internal.cloud`) across namespaces (`traefik`, `monitoring`, `vault`). |
-| **Wave 2** | `trust-manager` (`v0.22.0`) | `cert-manager` | Distributes the Homelab Root CA trust bundle (`Bundle/homelab-ca-bundle`) across namespaces. |
+| **Wave 1** | `metrics-server` (`3.12.2`) | `kube-system` | Kubernetes resource metrics API (`kubectl top`). |
+| **Wave 1** | `reflector` (`v10.0.10`) | `reflector` | Mirrors annotated Secrets and ConfigMaps (such as `wildcard-homelab-secret`) across all cluster namespaces. |
+| **Wave 2** | `homelab-tls` (`1.0.0`) | `cert-manager` | Creates `ClusterIssuer/homelab-ca-issuer` and `Certificate/wildcard-homelab-crt` (`*.internal.cloud`), mirrored cluster-wide by `reflector`. |
 | **Wave 2** | `metallb-custom-ip-pool` | `metallb-system` | Provisions `IPAddressPool` (`10.10.20.125-10.10.20.129`) and `L2Advertisement`. |
-| **Wave 2** | `longhorn` (`1.11.1`) | `longhorn-system` | Distributed block storage (`StorageClass: longhorn`, 2 replicas, `/var/lib/longhorn`). |
+| **Wave 2** | `longhorn` (`1.9.1`) | `longhorn-system` | Distributed block storage (`StorageClass: longhorn`, 2 replicas, `/var/lib/longhorn`). |
 | **Wave 2** | `cnpg-operator` (`0.23.2`) | `cnpg-system` | CloudNativePG operator for PostgreSQL clusters. |
 | **Wave 2** | `external-secrets` (`0.16.2`) | `external-secrets` | External Secrets Operator (`external-secrets.io/v1`) syncing Vault secrets into K8s `Secret`s. |
-| **Wave 3** | `traefik` (`39.0.7`) | `traefik` | Ingress controller bound to MetalLB IP `10.10.20.125` with default `wildcard-homelab-secret` TLS and Syslog TCP/UDP entrypoints. |
-| **Wave 3** | `vault` (`1.23.4` / `1.21.4`) | `vault` | Bank-Vaults operator + HashiCorp Vault (`2Gi` Longhorn PVC), auto-unsealed via K8s `Secret/vault-unseal-keys`, exposing the `homelab` KV v2 space via `ClusterSecretStore/vault-homelab`. |
+| **Wave 2** | `reloader` (`2.2.7`) | `reloader` | Stakater Reloader automatically rolling annotated workloads (`reloader.stakater.com/auto: "true"`) when Secrets/ConfigMaps change. |
+| **Wave 3** | `traefik` (`39.0.7`) | `traefik` | Ingress controller bound to MetalLB IP `10.10.20.125` with default `wildcard-homelab-secret` TLS. |
+| **Wave 3** | `vault` (`1.23.4` / `1.21.4`) | `vault` | Bank-Vaults operator + HashiCorp Vault (`2Gi` Longhorn PVC), auto-unsealed via K8s `Secret/vault-unseal-keys`, exposing the `internal` KV v2 space via `ClusterSecretStore/vault-homelab`. |
+| **Wave 4** | `descheduler` (`0.34.0`) | `kube-system` | Hourly `CronJob` rebalancing pod placement across nodes while excluding core system namespaces and PVC pods. |
 
 ### 4. Layer 4: Observability Stack (`observability/`)
 | Sync Wave | Component | Namespace | Role & Wiring |
@@ -251,21 +253,23 @@ infra_talos/
 │   ├── cert-manager/                      # Wave 1: Cert-Manager + Homelab Root CA Secret
 │   ├── metallb/                           # Wave 1: MetalLB Controller & Speaker
 │   ├── metrics-server/                    # Wave 1: Kubernetes Metrics Server
-│   ├── homelab-tls/                       # Wave 2: ClusterIssuer & *.internal.cloud Certificates
-│   ├── trust-manager/                     # Wave 2: Cluster-wide Homelab CA Bundle distribution
+│   ├── reflector/                         # Wave 1: Emberstack Reflector cross-namespace Secret/ConfigMap mirror
+│   ├── homelab-tls/                       # Wave 2: ClusterIssuer & *.internal.cloud Wildcard Certificate
 │   ├── metallb-custom-ip-pool/            # Wave 2: MetalLB L2 Pool (10.10.20.125-10.10.20.129)
 │   ├── longhorn/                          # Wave 2: Longhorn Distributed Block Storage
 │   ├── cnpg-operator/                     # Wave 2: CloudNativePG Operator
 │   ├── external-secrets/                  # Wave 2: External Secrets Operator (v0.16.2)
+│   ├── reloader/                          # Wave 2: Stakater Reloader controller
 │   ├── traefik/                           # Wave 3: Traefik Ingress Controller (10.10.20.125)
-│   └── vault/                             # Wave 3: Bank-Vaults Operator + HashiCorp Vault ('homelab' KV v2)
+│   ├── vault/                             # Wave 3: Bank-Vaults Operator + HashiCorp Vault ('internal' KV v2)
+│   └── descheduler/                       # Wave 4: Kubernetes Descheduler CronJob rebalancer
 ├── observability/                         # Layer 4: VictoriaMetrics + Alloy + Grafana Stack
 │   ├── victoria-metrics-operator/         # Wave 4: VictoriaMetrics Operator + Prometheus CRDs
 │   ├── kube-state-metrics/                # Wave 4: Kube-State-Metrics + ServiceMonitor
 │   ├── victoria-metrics/                  # Wave 5: VMCluster (vmstorage, vmselect, vminsert)
 │   ├── victoria-logs/                     # Wave 5: VLCluster (vlstorage, vlselect, vlinsert)
 │   ├── victoria-common/                   # Wave 6: VMAuth, VMUser, VMAgent, VLAgent, VMAlert, ExternalSecrets
-│   ├── grafana-alloy/                     # Wave 6: Clustered Alloy (Pod logs, ServiceMonitors, Blackbox)
+│   ├── grafana-alloy/                     # Wave 6: Clustered Alloy (Pod logs, ServiceMonitors, PodMonitors, Blackbox)
 │   ├── alloy-daemonset/                   # Wave 6: Node DaemonSet Alloy (Unix exporter, Kubelet/cAdvisor)
 │   └── grafana/                           # Wave 6: Grafana UI + Datasources + ExternalSecret
 ├── gitops/
@@ -273,11 +277,12 @@ infra_talos/
 │   ├── projects/
 │   │   └── app-projects.yaml.tftpl        # ArgoCD AppProjects (core-services, observability, workloads)
 │   └── appsets/
-│       ├── core-services-appset.yaml.tftpl # Sync-wave ordered Core Services ApplicationSet (Waves 1-3)
+│       ├── core-services-appset.yaml.tftpl # Sync-wave ordered Core Services ApplicationSet (Waves 1-4)
 │       ├── observability-appset.yaml.tftpl # Sync-wave ordered Observability ApplicationSet (Waves 4-6)
-│       └── workloads-appset.yaml.tftpl     # Optional Wave 7 Workloads ApplicationSet (HA PostgreSQL)
+│       └── workloads-appset.yaml.tftpl     # Optional Wave 7 Workloads ApplicationSet (PostgreSQL + LLM Stack)
 ├── workloads/                             # Layer 5: Optional Production Workloads (Wave 7)
-│   └── postgres-cluster/                  # 2-node HA CloudNativePG PostgreSQL 16 + Vault ESO + S3 Barman Backup
+│   ├── postgres-cluster/                  # 2-node HA CloudNativePG PostgreSQL 16 + pgvector + Vault ESO
+│   └── llm-stack/                         # NVIDIA Device Plugin + Multi-GPU Ollama + Open WebUI
 └── terraform/
     ├── versions.tf                        # Provider requirements (bpg/proxmox, siderolabs/talos, helm, kubernetes)
     ├── providers.tf                       # Provider configurations
@@ -319,7 +324,7 @@ kubectl get nodes -o wide
 
 ### 2. Retrieve Service Credentials
 
-* **ArgoCD Admin Password** (`https://argocd.internal.cloud`, user: `admin`):
+* **ArgoCD Admin Credentials** (`https://argocd.internal.cloud`, default: `admin` / `admin`, configurable via `argocd_admin_password`):
   ```bash
   cd infra_talos/terraform && terraform output -raw argocd_initial_admin_password; echo
   ```

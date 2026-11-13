@@ -1,10 +1,19 @@
+# ==============================================================================
+# Cert-Manager Controller & Homelab Root CA Secret
+# ==============================================================================
+
 cert-manager:
+  enabled: true
   crds:
     enabled: true
   prometheus:
     enabled: true
     servicemonitor:
       enabled: false
+
+# ==============================================================================
+# Internal Homelab Root CA Keypair (used when tls_mode = "internal-ca")
+# ==============================================================================
 
 rootCA:
   enabled: true

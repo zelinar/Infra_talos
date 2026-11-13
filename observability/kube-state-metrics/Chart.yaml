@@ -1,10 +1,12 @@
 apiVersion: v2
 name: kube-state-metrics
-description: Wrapper chart for kube-state-metrics
+description: Kubernetes object state metrics exporter with Prometheus ServiceMonitor
 type: application
-version: 0.1.0
+version: 1.0.0
 appVersion: "v2.18.0"
+
 dependencies:
   - name: kube-state-metrics
     version: 8.5.0
     repository: https://prometheus-community.github.io/helm-charts
+    condition: kube-state-metrics.enabled

@@ -1,0 +1,71 @@
+# ==============================================================================
+# Kubernetes Descheduler (CronJob Rebalancer)
+# ==============================================================================
+
+descheduler:
+  enabled: true
+  kind: CronJob
+  schedule: "0 * * * *"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 128Mi
+
+  deschedulerPolicy:
+    profiles:
+      - name: balanced
+        pluginConfig:
+          - name: DefaultEvictor
+            args:
+              ignorePvcPods: true
+              evictLocalStoragePods: false
+              evictSystemCriticalPods: false
+              nodeFit: true
+
+          - name: RemoveDuplicates
+
+          - name: RemovePodsViolatingInterPodAntiAffinity
+
+          - name: RemovePodsViolatingNodeAffinity
+            args:
+              nodeAffinityType:
+                - requiredDuringSchedulingIgnoredDuringExecution
+
+          - name: LowNodeUtilization
+            args:
+              thresholds:
+                cpu: 40
+                memory: 40
+                pods: 40
+              targetThresholds:
+                cpu: 70
+                memory: 70
+                pods: 70
+              evictableNamespaces:
+                exclude:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - argocd
+                  - cert-manager
+                  - cnpg-system
+                  - external-secrets
+                  - longhorn-system
+                  - metallb-system
+                  - reflector
+                  - reloader
+                  - traefik
+                  - vault
+
+        plugins:
+          balance:
+            enabled:
+              - RemoveDuplicates
+              - LowNodeUtilization
+          deschedule:
+            enabled:
+              - RemovePodsViolatingInterPodAntiAffinity
+              - RemovePodsViolatingNodeAffinity

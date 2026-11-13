@@ -1,3 +1,7 @@
+# ==============================================================================
+# Platform Wildcard TLS Configuration
+# ==============================================================================
+
 # TLS Mode: "internal-ca" (self-signed Root CA) or "letsencrypt" (ACME DNS-01 via Cloudflare)
 mode: "internal-ca"
 
@@ -6,10 +10,29 @@ issuerName: "homelab-ca-issuer"
 caSecretName: "homelab-ca-secret"
 certificateName: "wildcard-homelab-crt"
 wildcardSecretName: "wildcard-homelab-secret"
+
+# ==============================================================================
+# Cross-Namespace Secret Mirroring (Emberstack Reflector)
+# ==============================================================================
+
+# Issues a single wildcard Certificate in cert-manager and mirrors the resulting
+# TLS Secret across existing and newly created namespaces automatically.
+reflection:
+  enabled: true
+  # Comma-separated namespace allowlist (leave empty to mirror into all namespaces)
+  autoNamespaces: ""
+
+# Fallback target namespaces used only when reflection.enabled is false
 targetNamespaces:
   - traefik
+  - longhorn-system
+  - vault
   - monitoring
   - llm-stack
+
+# ==============================================================================
+# Let's Encrypt ACME DNS-01 Settings (used when mode = "letsencrypt")
+# ==============================================================================
 
 acme:
   email: "admin@internal.cloud"

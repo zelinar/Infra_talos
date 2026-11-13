@@ -1,8 +1,13 @@
+# ==============================================================================
+# VictoriaLogs VLCluster (vlstorage, vlselect, vlinsert)
+# ==============================================================================
+
 victoria-logs:
   ingress:
     enabled: false
     ingressDomain: "internal.cloud"
-    className: traefik
+    className: "traefik"
+    tlsSecretName: "wildcard-homelab-secret"
     setNamespace: false
     namePrefix: ""
     annotations: {}
@@ -10,7 +15,7 @@ victoria-logs:
 
   vlcluster:
     enabled: true
-    name: vlcluster
+    name: "vlcluster"
     setNamespace: false
     annotations: {}
 
@@ -24,10 +29,10 @@ victoria-logs:
           volumeClaimTemplate:
             spec:
               accessModes: ["ReadWriteOnce"]
-              storageClassName: longhorn
+              storageClassName: "longhorn"
               resources:
                 requests:
-                  storage: 15Gi
+                  storage: "15Gi"
         resources:
           requests:
             cpu: 100m
@@ -87,7 +92,7 @@ victoria-logs:
 
   vlagent:
     enabled: false
-    name: vlcluster-agent
+    name: "vlcluster-agent"
     setNamespace: false
     annotations: {}
     spec: {}

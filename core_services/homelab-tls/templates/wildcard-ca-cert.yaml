@@ -2,6 +2,39 @@
 {{- $issuer := .Values.issuerName | default "homelab-ca-issuer" -}}
 {{- $certName := .Values.certificateName | default "wildcard-homelab-crt" -}}
 {{- $secretName := .Values.wildcardSecretName | default "wildcard-homelab-secret" -}}
+{{- $reflect := .Values.reflection | default dict -}}
+{{- $reflectEnabled := true -}}
+{{- if hasKey $reflect "enabled" -}}
+{{- $reflectEnabled = $reflect.enabled -}}
+{{- end -}}
+{{- if $reflectEnabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $certName }}
+  namespace: {{ .Release.Namespace | default "cert-manager" }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  isCA: false
+  secretName: {{ $secretName }}
+  secretTemplate:
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+      {{- if $reflect.autoNamespaces }}
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: {{ $reflect.autoNamespaces | quote }}
+      {{- end }}
+  issuerRef:
+    name: {{ $issuer }}
+    kind: ClusterIssuer
+  commonName: {{ printf "*.%s" $domain | quote }}
+  dnsNames:
+    - {{ printf "*.%s" $domain | quote }}
+    - {{ $domain | quote }}
+{{- else }}
 {{- range $ns := (.Values.targetNamespaces | default (list "traefik" "monitoring")) }}
 ---
 apiVersion: cert-manager.io/v1
@@ -9,6 +42,10 @@ kind: Certificate
 metadata:
   name: {{ $certName }}
   namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: {{ $.Chart.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
 spec:
   isCA: false
   secretName: {{ $secretName }}
@@ -19,4 +56,5 @@ spec:
   dnsNames:
     - {{ printf "*.%s" $domain | quote }}
     - {{ $domain | quote }}
+{{- end }}
 {{- end }}

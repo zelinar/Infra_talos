@@ -2,5 +2,5 @@ apiVersion: v2
 name: postgres-cluster
 description: Production HA CloudNativePG PostgreSQL Cluster with Vault ExternalSecrets, VictoriaMetrics PodMonitor, and optional S3 Barman Backups
 type: application
-version: 0.1.0
+version: 1.0.0
 appVersion: "16.6"

@@ -37,6 +37,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: open-webui
+  annotations:
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: {{ .Values.openWebui.replicas | default 1 }}
   strategy:

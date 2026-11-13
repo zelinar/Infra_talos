@@ -1,3 +1,7 @@
+# ==============================================================================
+# Global Cluster Metadata & Telemetry Destinations
+# ==============================================================================
+
 global:
   cluster:
     name: "homelab-talos"
@@ -9,9 +13,11 @@ global:
     logsWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/loki/api/v1/push?_msg_field=msg,message,_msg"
 
 # ==============================================================================
-# LINUX DAEMONSET (Agent - Local Node Scraping on Talos Linux)
+# Linux DaemonSet (Local Node Scraping on Talos Linux)
 # ==============================================================================
+
 alloy-linux-ds:
+  enabled: true
   controller:
     type: daemonset
     priorityClassName: system-node-critical
@@ -89,10 +95,10 @@ alloy-linux-ds:
     resources:
       requests:
         cpu: 50m
-        memory: "256Mi"
+        memory: 256Mi
       limits:
         cpu: "1"
-        memory: "512Mi"
+        memory: 512Mi
     securityContext:
       privileged: true
       runAsUser: 0

@@ -1,12 +1,13 @@
 apiVersion: v2
 name: grafana-alloy
-description: Grafana Alloy clustered deployment for Kubernetes pod logs, ServiceMonitors, Blackbox, and push receivers
+description: Grafana Alloy clustered deployment for Kubernetes pod logs, ServiceMonitors, PodMonitors, Blackbox, and push receivers
 type: application
-version: 0.1.0
-appVersion: "v1.14.0"
+version: 1.0.0
+appVersion: "v1.21.3"
+
 dependencies:
   - name: alloy
     alias: alloy-external
     version: 1.14.4
-    repository: https://grafana.github.io/helm-charts/
+    repository: https://grafana.github.io/helm-charts
     condition: alloy-external.enabled

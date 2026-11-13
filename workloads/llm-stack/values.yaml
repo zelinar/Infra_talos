@@ -1,21 +1,23 @@
 # ==============================================================================
-# Local LLM Stack (Ollama + Open WebUI + NVIDIA GPU Device Plugin)
+# NVIDIA GPU RuntimeClass & Kubernetes Device Plugin
 # ==============================================================================
 
 gpu:
-  # Deploys RuntimeClass 'nvidia' and the NVIDIA Kubernetes Device Plugin DaemonSet
   devicePlugin:
     enabled: true
     image: "nvcr.io/nvidia/k8s-device-plugin:v0.17.0"
     nodeSelector:
       gpu.internal.cloud/nvidia: "true"
 
+# ==============================================================================
+# Ollama Multi-GPU Inference Server
+# ==============================================================================
+
 ollama:
   image: "ollama/ollama:0.5.13"
   port: 11434
 
   # GPU acceleration settings (tuned for 2x NVIDIA Quadro P620 = 4 GB combined VRAM)
-  # Set enabled: true once physical GPUs are passed through via gpu_pci_devices in Terraform
   gpu:
     enabled: true
     count: 2
@@ -44,11 +46,15 @@ ollama:
 
   resources:
     requests:
-      cpu: "1000m"
-      memory: "4Gi"
+      cpu: 1000m
+      memory: 4Gi
     limits:
-      cpu: "6000m"
-      memory: "12Gi"
+      cpu: 6000m
+      memory: 12Gi
+
+# ==============================================================================
+# Open WebUI Frontend (Backed by CloudNativePG pgvector)
+# ==============================================================================
 
 openWebui:
   image: "ghcr.io/open-webui/open-webui:v0.5.20"
@@ -60,7 +66,6 @@ openWebui:
   ragEmbeddingModel: "nomic-embed-text:latest"
   enableSignup: true
 
-  # Connects to CloudNativePG (workloads/postgres-cluster) for chat history & pgvector RAG
   database:
     enabled: true
     host: "platform-postgres-rw.postgres-cluster.svc.cluster.local"
@@ -73,13 +78,16 @@ openWebui:
 
   resources:
     requests:
-      cpu: "200m"
-      memory: "512Mi"
+      cpu: 200m
+      memory: 512Mi
     limits:
-      cpu: "2000m"
-      memory: "2Gi"
+      cpu: 2000m
+      memory: 2Gi
 
-# Syncs PostgreSQL credentials from HashiCorp Vault via External Secrets Operator
+# ==============================================================================
+# Vault / External Secrets & Traefik Ingress
+# ==============================================================================
+
 credentialsSecret:
   enabled: true
   secretStoreName: "vault-homelab"

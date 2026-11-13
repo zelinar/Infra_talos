@@ -1,138 +1,153 @@
+# ==============================================================================
+# External Secrets Operator ClusterSecretStores
+# ==============================================================================
+
 secrets: {}
 
 clusterSecretStores:
-  # Internal Vault secret store, bound to /internal KV v2 engine. K8s ServiceAccount auth.
+  # Internal platform Vault secret store bound to the /internal KV v2 engine
   vault-homelab:
     enabled: true
     type: vault
-    path: internal
+    path: "internal"
     auth:
       kubernetes:
-        role: vault
+        role: "vault"
         serviceAccountRef:
-          name: vault-sa
-          namespace: vault
+          name: "vault-sa"
+          namespace: "vault"
 
-  # General Vault secret store, bound to /secret KV v2 engine. K8s ServiceAccount auth.
+  # General Vault secret store bound to the /secret KV v2 engine
   vault:
     enabled: true
     type: vault
-    path: secret
+    path: "secret"
     auth:
       kubernetes:
-        role: vault
+        role: "vault"
         serviceAccountRef:
-          name: vault-sa
-          namespace: vault
+          name: "vault-sa"
+          namespace: "vault"
 
-# Values for bank-vaults vault-operator and vault-configurer
+# ==============================================================================
+# Bank-Vaults Operator & Configurer
+# ==============================================================================
+
 bankvaults:
+  enabled: true
   revisionHistoryLimit: 2
+
+  serviceAccount:
+    create: true
+    name: "vault-sa"
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
   resources:
-    limits:
-      memory: 128Mi
     requests:
       cpu: 10m
       memory: 64Mi
-  nodeSelector:
-    kubernetes.io/os: linux
-  serviceAccount:
-    create: true
-    name: vault-sa
+    limits:
+      memory: 128Mi
 
-# Values for Vault CR
+# ==============================================================================
+# HashiCorp Vault Custom Resource (Bank-Vaults Managed)
+# ==============================================================================
+
 vault:
   replicaCount: 1
   image:
-    registry: docker.io
-    repository: hashicorp/vault
-    tag: 1.21.4
+    registry: "docker.io"
+    repository: "hashicorp/vault"
+    tag: "1.21.4"
 
-  # Ingress configuration exposed via Traefik
   ingress:
-    className: traefik
+    className: "traefik"
     domain: "internal.cloud"
     issuerName: "homelab-ca-issuer"
     certificateName: "wildcard-homelab-crt"
+    # Disabled by default: wildcard-homelab-secret is mirrored into vault namespace by Reflector
+    createCertificate: false
     hosts:
-      - vault.internal.cloud
-    tlsSecretName: wildcard-homelab-secret
+      - "vault.internal.cloud"
+    tlsSecretName: "wildcard-homelab-secret"
 
-  # Resources for vault container
-  resources:
-    limits:
-      memory: 384Mi
-    requests:
-      cpu: 50m
-      memory: 256Mi
-
-  # Annotations applied to Vault Service/Ingress managed by Bank-Vaults Operator
   vaultAnnotations:
-    traefik.ingress.kubernetes.io/service.serversscheme: https
-    traefik.ingress.kubernetes.io/service.serverstransport: vault-skip-cert-verification@kubernetescrd
+    traefik.ingress.kubernetes.io/service.serversscheme: "https"
+    traefik.ingress.kubernetes.io/service.serverstransport: "vault-skip-cert-verification@kubernetescrd"
 
   nodeSelector:
     kubernetes.io/os: linux
 
   service:
     type: ClusterIP
-    name: vault
+    name: "vault"
     port: 8200
 
   storage:
     pvc:
-      size: 2Gi
+      size: "2Gi"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 384Mi
 
   metrics:
     enabled: true
     serviceMonitorEnabled: false
-    retention: 12h
+    retention: "12h"
     serviceAccount:
-      name: grafana-alloy
-      namespace: monitoring
+      name: "grafana-alloy-alloy-external"
+      namespace: "monitoring"
 
-  # Additional Kubernetes auth roles (optional)
   kubernetes:
     roles:
-      - name: argocd
+      - name: "argocd"
         bound_service_account_names:
-          - argocd-server
+          - "argocd-server"
         bound_service_account_namespaces:
-          - argocd
+          - "argocd"
         policies:
-          - homelab_edit
-          - secrets_admin
-        ttl: 1h
+          - "homelab_edit"
+          - "secrets_admin"
+        ttl: "1h"
 
-  # Initial secrets seeded into the 'internal' KV v2 engine by bank-vaults configurer
-  kvPath: internal
+  # ============================================================================
+  # Initial Platform Secrets Seeded into the 'internal' KV v2 Engine
+  # ============================================================================
+
+  kvPath: "internal"
   startupSecrets:
     - type: kv
-      path: internal/data/core/argocd
-      data:
-        data:
-          admin-user: "admin"
-          admin-password: ""
-    - type: kv
-      path: internal/data/observability/victoria
-      data:
-        data:
-          alloy_active_token: "homelab-alloy-collect-token-active"
-          victoria_active_token: "homelab-victoria-ingest-token-active"
-    - type: kv
-      path: internal/data/observability/grafana
+      path: "internal/data/core/argocd"
       data:
         data:
           admin-user: "admin"
           admin-password: "admin"
     - type: kv
-      path: internal/data/workloads/postgres
+      path: "internal/data/observability/victoria"
+      data:
+        data:
+          alloy_active_token: "homelab-alloy-collect-token-active"
+          victoria_active_token: "homelab-victoria-ingest-token-active"
+    - type: kv
+      path: "internal/data/observability/grafana"
+      data:
+        data:
+          admin-user: "admin"
+          admin-password: "admin"
+    - type: kv
+      path: "internal/data/workloads/postgres"
       data:
         data:
           username: "appuser"
           password: "homelab-postgres-password"
     - type: kv
-      path: internal/data/storage/longhorn-s3
+      path: "internal/data/storage/longhorn-s3"
       data:
         data:
           access_key_id: ""

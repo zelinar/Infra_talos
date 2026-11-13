@@ -3,7 +3,10 @@ name: traefik
 description: Traefik Ingress Controller with default wildcard TLSStore
 type: application
 version: 1.0.0
+appVersion: "v3.6.7"
+
 dependencies:
   - name: traefik
     version: 39.0.7
     repository: https://traefik.github.io/charts
+    condition: traefik.enabled

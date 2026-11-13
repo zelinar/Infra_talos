@@ -1,7 +1,16 @@
+# ==============================================================================
+# Prometheus Operator CRDs (ServiceMonitor, PodMonitor, PrometheusRule)
+# ==============================================================================
+
 prometheus-operator-crds:
   enabled: true
 
+# ==============================================================================
+# VictoriaMetrics Operator
+# ==============================================================================
+
 victoria-metrics-operator:
+  enabled: true
   replicaCount: 1
 
   crds:
@@ -19,13 +28,13 @@ victoria-metrics-operator:
 
   env:
     - name: VM_METRICS_VERSION
-      value: v1.145.0
+      value: "v1.145.0"
     - name: VM_LOGS_VERSION
-      value: v1.51.0
+      value: "v1.51.0"
     - name: VM_VMALERTMANAGER_VERSION
-      value: v0.33.0
+      value: "v0.33.0"
     - name: VM_VMBACKUP_VERSION
-      value: v1.145.0
+      value: "v1.145.0"
     - name: VM_VMAGENT_READYTIMEOUT
       value: "30s"
 

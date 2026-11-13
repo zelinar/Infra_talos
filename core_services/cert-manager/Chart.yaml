@@ -3,7 +3,10 @@ name: cert-manager
 description: Cert-Manager controller and Homelab Root CA secret
 type: application
 version: 1.0.0
+appVersion: "v1.20.1"
+
 dependencies:
   - name: cert-manager
-    version: 1.20.1
+    version: v1.20.1
     repository: https://charts.jetstack.io
+    condition: cert-manager.enabled

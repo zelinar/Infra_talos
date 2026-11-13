@@ -1,0 +1,12 @@
+apiVersion: v2
+name: reflector
+description: Emberstack Reflector controller for mirroring Secrets and ConfigMaps across namespaces
+type: application
+version: 1.0.0
+appVersion: "v10.0.10"
+
+dependencies:
+  - name: reflector
+    version: v10.0.10
+    repository: https://emberstack.github.io/helm-charts
+    condition: reflector.enabled

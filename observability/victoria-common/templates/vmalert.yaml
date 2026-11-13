@@ -1,5 +1,5 @@
 {{- $cfg := (index .Values "victoria-common" "vmalert") | default dict -}}
-{{- if $cfg.enabled -}}
+{{- if $cfg.enabled }}
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMAlert
 metadata:
@@ -9,12 +9,12 @@ metadata:
   {{- end }}
   {{- with $cfg.annotations }}
   annotations:
-{{ toYaml . | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-{{- if $cfg.spec }}
-{{ toYaml $cfg.spec | nindent 2 }}
-{{- else }}
+  {{- if $cfg.spec }}
+  {{- toYaml $cfg.spec | nindent 2 }}
+  {{- else }}
   {}
-{{- end }}
+  {{- end }}
 {{- end }}

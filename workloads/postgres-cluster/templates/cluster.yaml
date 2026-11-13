@@ -3,6 +3,8 @@ kind: Cluster
 metadata:
   name: {{ .Values.clusterName | default "platform-postgres" }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgres-cluster.labels" . | nindent 4 }}
 spec:
   instances: {{ .Values.instances | default 2 }}
   imageName: {{ .Values.imageName | default "ghcr.io/cloudnative-pg/postgresql:16.6" | quote }}
@@ -41,24 +43,24 @@ spec:
       {{- end }}
       s3Credentials:
         accessKeyId:
-          name: {{ .Values.backup.s3CredentialsSecretName | default "longhorn-s3-credentials" }}
+          name: {{ .Values.backup.s3CredentialsSecretName | default "postgres-s3-credentials" }}
           key: {{ .Values.backup.accessKeyIdKey | default "AWS_ACCESS_KEY_ID" }}
         secretAccessKey:
-          name: {{ .Values.backup.s3CredentialsSecretName | default "longhorn-s3-credentials" }}
+          name: {{ .Values.backup.s3CredentialsSecretName | default "postgres-s3-credentials" }}
           key: {{ .Values.backup.secretAccessKeyKey | default "AWS_SECRET_ACCESS_KEY" }}
       wal:
         compression: gzip
-  {{- end }}
-{{- if and .Values.backup .Values.backup.enabled }}
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
   name: {{ .Values.clusterName | default "platform-postgres" }}-daily-backup
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgres-cluster.labels" . | nindent 4 }}
 spec:
   schedule: {{ .Values.backup.schedule | default "0 0 3 * * *" | quote }}
   backupOwnerReference: self
   cluster:
     name: {{ .Values.clusterName | default "platform-postgres" }}
-{{- end }}
+  {{- end }}

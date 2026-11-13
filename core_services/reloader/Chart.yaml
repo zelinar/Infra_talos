@@ -1,0 +1,12 @@
+apiVersion: v2
+name: reloader
+description: Stakater Reloader controller for automatic workload rollouts on Secret and ConfigMap updates
+type: application
+version: 1.0.0
+appVersion: "v1.3.0"
+
+dependencies:
+  - name: reloader
+    version: 2.2.7
+    repository: https://stakater.github.io/stakater-charts
+    condition: reloader.enabled

@@ -3,3 +3,4 @@ name: metallb-custom-ip-pool
 description: MetalLB IPAddressPool and L2Advertisement for Homelab
 type: application
 version: 1.0.0
+appVersion: "v0.15.2"

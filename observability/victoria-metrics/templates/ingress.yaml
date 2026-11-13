@@ -1,55 +1,50 @@
-{{- /*
-templates/ingress.yaml
-
-Renders one or more Ingress resources from:
-.Values["victoria-metrics"].ingress.ingresses[]
-*/ -}}
 {{- $cfg := index .Values "victoria-metrics" -}}
 {{- if and $cfg $cfg.ingress $cfg.ingress.enabled -}}
 {{- $domain := required "victoria-metrics.ingress.ingressDomain is required" $cfg.ingress.ingressDomain -}}
-
 {{- range $ing := $cfg.ingress.ingresses -}}
 {{- if $ing.enabled -}}
 {{- $host := $ing.host -}}
 {{- if and $domain (not (contains "." $ing.host)) -}}
 {{- $host = printf "%s.%s" $ing.host $domain -}}
-{{- end -}}
-
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ printf "%s%s" $cfg.ingress.namePrefix $ing.name | trunc 63 | trimSuffix "-" }}
-{{ if $cfg.ingress.setNamespace }}
+  {{- if $cfg.ingress.setNamespace }}
   namespace: {{ $.Release.Namespace }}
-{{ end }}
+  {{- end }}
   labels:
-    app.kubernetes.io/name: {{ $.Chart.Name }}
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-    helm.sh/chart: {{ printf "%s-%s" $.Chart.Name $.Chart.Version | quote }}
-{{ with $cfg.ingress.annotations }}
+    {{- include "victoria-metrics.labels" $ | nindent 4 }}
+  {{- with $cfg.ingress.annotations }}
   annotations:
-{{ toYaml . | nindent 4 }}
-{{ end }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-{{ if $cfg.ingress.className }}
+  {{- if $cfg.ingress.className }}
   ingressClassName: {{ $cfg.ingress.className }}
-{{ end }}
+  {{- end }}
+  {{- $tlsSecret := $ing.tlsSecretName | default $cfg.ingress.tlsSecretName }}
+  {{- if $tlsSecret }}
+  tls:
+    - secretName: {{ $tlsSecret | quote }}
+      hosts:
+        - {{ $host | quote }}
+  {{- end }}
   rules:
     - host: {{ $host | quote }}
       http:
         paths:
-{{ range $p := $ing.paths }}
+          {{- range $p := $ing.paths }}
           - path: {{ $p.path | quote }}
-            pathType: {{ $p.pathType }}
+            pathType: {{ $p.pathType | default "Prefix" }}
             backend:
               service:
                 name: {{ $ing.service.name }}
                 port:
                   number: {{ $ing.service.port }}
-{{ end }}
-
+          {{- end }}
 {{- end -}}
 {{- end -}}
 {{- end -}}

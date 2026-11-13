@@ -16,17 +16,18 @@
       metadata:
         name: '{{ .path.basename }}'
         annotations:
-          # Ordered Sync Waves prevent CRD and webhook race conditions:
-          # Wave 1: Foundational CRDs & Controllers (cert-manager, metallb, metrics-server)
-          # Wave 2: Issuers, IP Pools, Storage, DB Operators (homelab-tls, metallb-custom-ip-pool, longhorn, cnpg-operator, trust-manager, external-secrets)
-          # Wave 3: Ingress, DNS & Secret Vault (traefik, external-dns, vault)
+          # Ordered Sync Waves prevent CRD, secret-mirroring, and webhook race conditions:
+          # Wave 1: Foundational CRDs, Metrics & Secret Mirroring (cert-manager, metallb, metrics-server, reflector)
+          # Wave 2: Issuers, IP Pools, Storage, DB/Secret Operators & Reloader (homelab-tls, metallb-custom-ip-pool, longhorn, cnpg-operator, external-secrets, reloader)
+          # Wave 3: Ingress & Secret Vault (traefik, vault)
+          # Wave 4: Day-2 Cluster Rebalancing & Additional Services (descheduler)
           argocd.argoproj.io/sync-wave: >-
             {{- $name := .path.basename -}}
-            {{- if or (eq $name "cert-manager") (eq $name "metallb") (eq $name "metrics-server") -}}
+            {{- if or (eq $name "cert-manager") (eq $name "metallb") (eq $name "metrics-server") (eq $name "reflector") -}}
               1
-            {{- else if or (eq $name "homelab-tls") (eq $name "trust-manager") (eq $name "metallb-custom-ip-pool") (eq $name "longhorn") (eq $name "cnpg-operator") (eq $name "external-secrets") -}}
+            {{- else if or (eq $name "homelab-tls") (eq $name "metallb-custom-ip-pool") (eq $name "longhorn") (eq $name "cnpg-operator") (eq $name "external-secrets") (eq $name "reloader") -}}
               2
-            {{- else if or (eq $name "traefik") (eq $name "external-dns") (eq $name "vault") -}}
+            {{- else if or (eq $name "traefik") (eq $name "vault") -}}
               3
             {{- else -}}
               4
@@ -143,11 +144,11 @@
               metallb-system
             {{- else if eq $name "traefik" -}}
               traefik
-            {{- else if or (eq $name "cert-manager") (eq $name "homelab-tls") (eq $name "trust-manager") -}}
+            {{- else if or (eq $name "cert-manager") (eq $name "homelab-tls") -}}
               cert-manager
             {{- else if eq $name "cnpg-operator" -}}
               cnpg-system
-            {{- else if eq $name "metrics-server" -}}
+            {{- else if or (eq $name "metrics-server") (eq $name "descheduler") -}}
               kube-system
             {{- else if eq $name "external-secrets" -}}
               external-secrets

@@ -1,18 +1,24 @@
-victoria-common:
-  deploymentNamespace: monitoring
+# ==============================================================================
+# Victoria Common Gateway, Buffered Agents, Alerting & Auth Tokens
+# ==============================================================================
 
-  # Built-in Kubernetes Secrets for Homelab (used when ExternalSecrets / Vault is not deployed).
-  # Provides the exact same token secrets used by Alloy -> VMAuth -> VMAgent/VLAgent -> VMAuth -> VMCluster/VLCluster.
+victoria-common:
+  deploymentNamespace: "monitoring"
+
+  # ============================================================================
+  # Authentication Secrets (Static Fallback vs. Vault ExternalSecrets)
+  # ============================================================================
+
   staticSecrets:
     enabled: false
     alloyActiveToken: "homelab-alloy-collect-token-active"
     victoriaActiveToken: "homelab-victoria-ingest-token-active"
 
-  # Vault / ExternalSecrets integration (synced from Vault KV v2 'homelab' space via vault-homelab ClusterSecretStore)
+  # Synced from Vault KV v2 'internal' engine via vault-homelab ClusterSecretStore
   credentialsSecret:
     enabled: true
-    secretStoreName: vault-homelab
-    secretStoreKind: ClusterSecretStore
+    secretStoreName: "vault-homelab"
+    secretStoreKind: "ClusterSecretStore"
     remoteKeyPrefix: "observability/victoria"
     refreshInterval: "10m"
     annotations: {}
@@ -33,10 +39,14 @@ victoria-common:
             remoteProperty: victoria_active_token
     extraItems: []
 
+  # ============================================================================
+  # VMAuth Ingress & UI Root Redirects (vm.<domain>, vl.<domain>)
+  # ============================================================================
+
   ingress:
     enabled: true
     ingressDomain: "internal.cloud"
-    className: traefik
+    className: "traefik"
     setNamespace: false
     tlsSecretName: "wildcard-homelab-secret"
     annotations:
@@ -61,6 +71,10 @@ victoria-common:
         - name: vl-vmui
           host: vl
           targetPath: /select/vmui/
+
+  # ============================================================================
+  # VMAuth Gateway & VMUser Bearer Token Routing
+  # ============================================================================
 
   vmauth:
     enabled: true
@@ -222,6 +236,10 @@ victoria-common:
                 kind: "VLCluster/vlinsert"
                 name: "vlcluster"
 
+  # ============================================================================
+  # Stateful Telemetry Buffers (VMAgent & VLAgent with Longhorn Persistent Queues)
+  # ============================================================================
+
   vmagent:
     enabled: true
     name: vmagent
@@ -328,6 +346,10 @@ victoria-common:
           cpu: "1"
           memory: 512Mi
 
+  # ============================================================================
+  # Alerting Engine & Rules (VMAlert, VMAlertmanager, VMRule)
+  # ============================================================================
+
   vmalert:
     enabled: true
     name: vmalert
@@ -428,7 +450,6 @@ victoria-common:
                 - alert: NodeHighMemoryUsage
                   expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
                   for: "5m"
-                  record: ""
                   labels:
                     severity: warning
                   annotations:
@@ -437,7 +458,6 @@ victoria-common:
                 - alert: NodeFilesystemAlmostOutOfSpace
                   expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
                   for: "5m"
-                  record: ""
                   labels:
                     severity: warning
                   annotations:

@@ -1,8 +1,16 @@
+# ==============================================================================
+# Longhorn UI Ingress (Traefik)
+# ==============================================================================
+
 ingress:
   enabled: true
-  ingressClassName: traefik
+  ingressClassName: "traefik"
   host: "longhorn.internal.cloud"
   tlsSecretName: "wildcard-homelab-secret"
+
+# ==============================================================================
+# S3 Disaster Recovery Backup & Daily RecurringJob
+# ==============================================================================
 
 backup:
   enabled: false
@@ -17,14 +25,19 @@ backup:
     retain: 7
     concurrency: 2
 
+# ==============================================================================
+# Longhorn Subchart Configuration
+# ==============================================================================
+
 longhorn:
+  enabled: true
   longhornUI:
     replicas: 1
   persistence:
     defaultClassReplicaCount: 2
   defaultSettings:
-    defaultDataPath: /var/lib/longhorn
-    defaultDataLocality: best-effort
+    defaultDataPath: "/var/lib/longhorn"
+    defaultDataLocality: "best-effort"
     defaultReplicaCount: 2
     storageOverProvisioningPercentage: 200
     storageMinimalAvailablePercentage: 15

@@ -1,12 +1,7 @@
-{{- /*
-Ingress for shared VMAuth
-*/ -}}
-
 {{- $common := (index .Values "victoria-common") | default dict -}}
 {{- $deployNS := (get $common "deploymentNamespace") | default "" -}}
 {{- $ing := (get $common "ingress") | default dict -}}
 {{- $v := (get $common "vmauth") | default dict -}}
-
 {{- if and (get $v "enabled") (get $ing "enabled") -}}
 {{- $name := required "victoria-common.vmauth.name is required" (get $v "name") -}}
 {{- $domain := required "victoria-common.ingress.ingressDomain is required" (get $ing "ingressDomain") -}}
@@ -14,18 +9,17 @@ Ingress for shared VMAuth
 {{- $hosts := required "victoria-common.ingress.hosts is required" (get $ing "hosts") -}}
 {{- $paths := required "victoria-common.ingress.paths is required" (get $ing "paths") -}}
 {{- $tlsSecret := get $ing "tlsSecretName" -}}
-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ default (printf "vmauth-%s-gateway" $name) (get $ing "name") | quote }}
-{{ if (get $ing "setNamespace") }}
+  {{- if (get $ing "setNamespace") }}
   namespace: {{ default .Release.Namespace $deployNS | quote }}
-{{ end }}
-{{ with (get $ing "annotations") }}
+  {{- end }}
+  {{- with (get $ing "annotations") }}
   annotations:
-{{ toYaml . | nindent 4 }}
-{{ end }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ingressClassName: {{ $class | quote }}
   tls:
@@ -33,23 +27,23 @@ spec:
       secretName: {{ $tlsSecret | quote }}
       {{- end }}
       hosts:
-{{- range $h := $hosts }}
-{{- $fqdn := $h -}}
-{{- if not (contains "." $h) -}}
-{{- $fqdn = printf "%s.%s" $h $domain -}}
-{{- end }}
+        {{- range $h := $hosts }}
+        {{- $fqdn := $h -}}
+        {{- if not (contains "." $h) -}}
+        {{- $fqdn = printf "%s.%s" $h $domain -}}
+        {{- end }}
         - {{ $fqdn | quote }}
-{{- end }}
+        {{- end }}
   rules:
-{{- range $h := $hosts }}
-{{- $fqdn := $h -}}
-{{- if not (contains "." $h) -}}
-{{- $fqdn = printf "%s.%s" $h $domain -}}
-{{- end }}
+    {{- range $h := $hosts }}
+    {{- $fqdn := $h -}}
+    {{- if not (contains "." $h) -}}
+    {{- $fqdn = printf "%s.%s" $h $domain -}}
+    {{- end }}
     - host: {{ $fqdn | quote }}
       http:
         paths:
-{{- range $p := $paths }}
+          {{- range $p := $paths }}
           - path: {{ required "each ingress path must include path" (get $p "path") | quote }}
             pathType: {{ default "Prefix" (get $p "pathType") | quote }}
             backend:
@@ -57,7 +51,6 @@ spec:
                 name: {{ default (printf "vmauth-%s" $name) (get $ing "serviceName") | quote }}
                 port:
                   number: {{ default 8427 (get $ing "servicePort") }}
+          {{- end }}
+    {{- end }}
 {{- end }}
-{{- end }}
-
-{{- end -}}

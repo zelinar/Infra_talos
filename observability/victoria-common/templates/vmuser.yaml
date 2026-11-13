@@ -28,18 +28,18 @@ metadata:
   {{- end }}
   {{- with $labels }}
   labels:
-{{ toYaml . | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- with $annotations }}
   annotations:
-{{ toYaml . | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-{{- if $spec }}
-{{ toYaml $spec | nindent 2 }}
-{{- else }}
+  {{- if $spec }}
+  {{- toYaml $spec | nindent 2 }}
+  {{- else }}
   {}
-{{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

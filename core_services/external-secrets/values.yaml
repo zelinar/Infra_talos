@@ -1,11 +1,16 @@
+# ==============================================================================
+# Cluster-Scoped Secret Stores & Optional Cluster External Secrets
+# ==============================================================================
+
 clusterSecretStores: {}
 
 clusterSecrets:
   # Optional cluster-wide Docker Hub pull secret (synced from vault-homelab when enabled)
   dockerHubPull:
     enabled: false
-    secretStoreName: vault-homelab
-    secretStoreKind: ClusterSecretStore
+    secretStoreName: "vault-homelab"
+    secretStoreKind: "ClusterSecretStore"
+    refreshInterval: "15m"
     items:
       - name: dockerhub-image-pull-secret
         targetTemplate:
@@ -21,31 +26,33 @@ clusterSecrets:
             remoteKey: core/dockerhub
             remoteProperty: token
 
+# ==============================================================================
+# External Secrets Operator, Webhook & Cert Controller
+# ==============================================================================
+
 external-secrets:
+  enabled: true
   installCRDs: true
 
-  # external-secrets operator resources
   resources:
-    limits:
-      memory: 128Mi
     requests:
       cpu: 10m
       memory: 80Mi
+    limits:
+      memory: 128Mi
 
-  # external-secrets webhook resources
   webhook:
     resources:
-      limits:
-        memory: 64Mi
       requests:
         cpu: 5m
         memory: 48Mi
-
-  # external-secrets cert controller resources
-  certController:
-    resources:
       limits:
         memory: 64Mi
+
+  certController:
+    resources:
       requests:
         cpu: 5m
         memory: 56Mi
+      limits:
+        memory: 64Mi

@@ -1,30 +1,20 @@
-{{- /*
-templates/vlagent.yaml
-
-Renders a VLAgent custom resource from:
-.Values["victoria-logs"].vlagent
-*/ -}}
 {{- $cfg := index .Values "victoria-logs" -}}
-{{- if and $cfg $cfg.vlagent $cfg.vlagent.enabled -}}
-{{- $root := . -}}
+{{- if and $cfg $cfg.vlagent $cfg.vlagent.enabled }}
 apiVersion: operator.victoriametrics.com/v1
 kind: VLAgent
 metadata:
   name: {{ default "vlcluster-agent" $cfg.vlagent.name }}
   {{- if $cfg.vlagent.setNamespace }}
-  namespace: {{ $root.Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: {{ $root.Chart.Name }}
-    app.kubernetes.io/instance: {{ $root.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
-    helm.sh/chart: {{ printf "%s-%s" $root.Chart.Name $root.Chart.Version | quote }}
+    {{- include "victoria-logs.labels" . | nindent 4 }}
   {{- with $cfg.vlagent.annotations }}
   annotations:
-{{ toYaml . | indent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-{{- with $cfg.vlagent.spec }}
-{{ toYaml . | indent 2 }}
-{{- end }}
+  {{- with $cfg.vlagent.spec }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
 {{- end }}

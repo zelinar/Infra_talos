@@ -1,30 +1,20 @@
-{{- /*
-templates/vmcluster.yaml
-
-Renders a VMCluster custom resource from:
-.Values["victoria-metrics"].vmcluster
-*/ -}}
 {{- $cfg := index .Values "victoria-metrics" -}}
-{{- if and $cfg $cfg.vmcluster $cfg.vmcluster.enabled -}}
-{{- $root := . -}}
+{{- if and $cfg $cfg.vmcluster $cfg.vmcluster.enabled }}
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMCluster
 metadata:
   name: {{ default "vmcluster" $cfg.vmcluster.name }}
   {{- if $cfg.vmcluster.setNamespace }}
-  namespace: {{ $root.Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   {{- end }}
   labels:
-    app.kubernetes.io/name: {{ $root.Chart.Name }}
-    app.kubernetes.io/instance: {{ $root.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $root.Release.Service }}
-    helm.sh/chart: {{ printf "%s-%s" $root.Chart.Name $root.Chart.Version | quote }}
+    {{- include "victoria-metrics.labels" . | nindent 4 }}
   {{- with $cfg.vmcluster.annotations }}
   annotations:
-{{ toYaml . | indent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-{{- with $cfg.vmcluster.spec }}
-{{ toYaml . | indent 2 }}
-{{- end }}
+  {{- with $cfg.vmcluster.spec }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
 {{- end }}

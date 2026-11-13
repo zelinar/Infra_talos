@@ -1,0 +1,17 @@
+# ==============================================================================
+# Stakater Reloader (Automatic Rollouts on ConfigMap / Secret Changes)
+# ==============================================================================
+
+reloader:
+  enabled: true
+
+  reloader:
+    watchGlobally: true
+    readOnlyRootFileSystem: true
+    deployment:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 128Mi

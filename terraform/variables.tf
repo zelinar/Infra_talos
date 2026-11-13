@@ -409,9 +409,9 @@ variable "argocd_ha_enabled" {
 }
 
 variable "argocd_admin_password" {
-  description = "Optional custom plaintext password for ArgoCD admin user (automatically bcrypt-hashed). Leave empty to use ArgoCD's auto-generated initial secret."
+  description = "Initial plaintext password for the ArgoCD 'admin' user (automatically bcrypt-hashed). Leave empty to use ArgoCD's auto-generated initial secret."
   type        = string
-  default     = ""
+  default     = "admin"
   sensitive   = true
 }
 

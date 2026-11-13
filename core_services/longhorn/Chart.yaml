@@ -3,7 +3,10 @@ name: longhorn
 description: Longhorn distributed block storage for Talos Linux
 type: application
 version: 1.0.0
+appVersion: "v1.9.1"
+
 dependencies:
   - name: longhorn
     version: 1.9.1
     repository: https://charts.longhorn.io
+    condition: longhorn.enabled

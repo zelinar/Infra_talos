@@ -1,3 +1,7 @@
+# ==============================================================================
+# Global Cluster Metadata & Telemetry Destinations
+# ==============================================================================
+
 global:
   crds:
     create: false
@@ -10,16 +14,20 @@ global:
     metricsRemoteWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/0/prometheus/api/v1/write"
     logsWriteUrl: "http://vmauth-lb.monitoring.svc:8427/insert/loki/api/v1/push?_msg_field=msg,message,_msg"
 
+# ==============================================================================
+# Grafana Alloy External Deployment (Clustered Collector & Push Gateway)
+# ==============================================================================
+
 alloy-external:
   enabled: true
   secretStoreRef:
-    name: vault-platform-kv
-    kind: ClusterSecretStore
+    name: "vault-homelab"
+    kind: "ClusterSecretStore"
   snmpSecret:
-    name: alloy-external-snmp-config
+    name: "alloy-external-snmp-config"
     refreshInterval: "15m"
-    configMapName: alloy-external-snmp-config-tpl
-    configMapKey: snmp.yml
+    configMapName: "alloy-external-snmp-config-tpl"
+    configMapKey: "snmp.yml"
     fields:
       - auth_protocol
       - password
@@ -90,20 +98,29 @@ alloy-external:
         protocol: UDP
     livenessProbe:
       httpGet:
+        path: /-/healthy
+        port: 12345
+        scheme: HTTP
+      initialDelaySeconds: 30
+      timeoutSeconds: 5
+      periodSeconds: 30
+      failureThreshold: 5
+    readinessProbe:
+      httpGet:
         path: /-/ready
         port: 12345
         scheme: HTTP
       initialDelaySeconds: 15
       timeoutSeconds: 5
-      periodSeconds: 30
+      periodSeconds: 10
       failureThreshold: 3
     resources:
       requests:
         cpu: 50m
-        memory: "256Mi"
+        memory: 256Mi
       limits:
         cpu: "1"
-        memory: "512Mi"
+        memory: 512Mi
     clustering:
       enabled: true
       name: external-metrics-alloy-cluster
@@ -162,6 +179,10 @@ alloy-external:
         service:
           port: 1525
 
+# ==============================================================================
+# Alloy Pipeline Configuration (ConfigMap Sections)
+# ==============================================================================
+
 configExternal:
   scrapeInterval: "30s"
   filterMetricsRegex: "^(go_.*|.*_bucket|container_fs_.*|container_memory_failures.*|flag|grpc_.*|container_tasks_state)$"
@@ -170,7 +191,7 @@ configExternal:
     config_file: "/etc/snmp_exporter/snmp.yml"
     defaultScrapeTimeout: "15s"
     defaultLabels:
-      owner: homelab
+      owner: "homelab"
     defaultAuth: ""
     walkParams:
       fast:
@@ -182,9 +203,9 @@ configExternal:
     targets: []
 
   blackbox:
-    defaultModule: http_2xx
+    defaultModule: "http_2xx"
     defaultLabels:
-      site: internal
+      site: "internal"
     config: |
       modules:
         http_2xx:
@@ -204,13 +225,14 @@ configExternal:
         address: "https://google.com"
         module: "http_2xx_or_3xx"
         labels:
-          site: external
+          site: "external"
 
   sectionOrder:
     - destinations
     - podDiscovery
     - podLogs
     - serviceMonitors
+    - podMonitors
     - promReceive
     - snmpTargets
     - blackboxTargets
@@ -571,11 +593,11 @@ configExternal:
         // SERVICE MONITORS
         // ---------------------
         prometheus.operator.servicemonitors "k8s_services" {
-            forward_to = [prometheus.relabel.servicemonitor_labels.receiver]
+          forward_to = [prometheus.relabel.servicemonitor_labels.receiver]
 
-            clustering {
-              enabled = true
-            }
+          clustering {
+            enabled = true
+          }
         }
 
         prometheus.relabel "servicemonitor_labels" {
@@ -620,6 +642,68 @@ configExternal:
           rule {
             action = "labeldrop"
             regex  = "endpoint|pod|service"
+          }
+          rule {
+            action = "labeldrop"
+            regex  = "__meta_.+"
+          }
+        }
+    podMonitors:
+      enabled: true
+      content: |
+        // ---------------------
+        // POD MONITORS
+        // ---------------------
+        prometheus.operator.podmonitors "k8s_pods" {
+          forward_to = [prometheus.relabel.podmonitor_labels.receiver]
+
+          clustering {
+            enabled = true
+          }
+        }
+
+        prometheus.relabel "podmonitor_labels" {
+          forward_to = [prometheus.relabel.filter_metrics.receiver]
+
+          rule {
+            source_labels = ["pod"]
+            regex         = "(.+)"
+            target_label  = "instance"
+          }
+
+          rule {
+            source_labels = ["app_kubernetes_io_name"]
+            regex         = "(.+)"
+            target_label  = "workload"
+          }
+          rule {
+            source_labels = ["workload", "app"]
+            separator     = ";"
+            regex         = ";(.+)"
+            target_label  = "workload"
+            replacement   = "${1}"
+          }
+          rule {
+            source_labels = ["workload", "cnpg_io_cluster"]
+            separator     = ";"
+            regex         = ";(.+)"
+            target_label  = "workload"
+            replacement   = "${1}"
+          }
+
+          rule {
+            target_label = "device"
+            replacement  = "pod"
+          }
+
+          rule {
+            target_label = "job"
+            replacement  = "pod_metrics"
+          }
+
+          rule {
+            action = "labeldrop"
+            regex  = "endpoint|pod"
           }
           rule {
             action = "labeldrop"

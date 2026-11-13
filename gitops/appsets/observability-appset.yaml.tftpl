@@ -64,6 +64,8 @@
                   region: ${jsonencode(cluster_region)}
                   owner: ${jsonencode(cluster_owner)}
               alloy-external:
+                secretStoreRef:
+                  name: ${jsonencode(vault_cluster_secret_store)}
                 customIngresses:
                   defaults:
                     domain: ${jsonencode(base_domain)}

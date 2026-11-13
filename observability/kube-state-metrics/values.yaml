@@ -1,10 +1,17 @@
+# ==============================================================================
+# Kube-State-Metrics Exporter
+# ==============================================================================
+
 kube-state-metrics:
+  enabled: true
   replicas: 1
+
   prometheus:
     monitor:
       enabled: true
       additionalLabels: {}
       honorLabels: true
+
   resources:
     requests:
       cpu: 20m
@@ -12,12 +19,14 @@ kube-state-metrics:
     limits:
       cpu: 500m
       memory: 256Mi
+
   securityContext:
     enabled: true
     runAsNonRoot: true
     runAsUser: 65534
     runAsGroup: 65534
     fsGroup: 65534
+
   containerSecurityContext:
     readOnlyRootFilesystem: true
     allowPrivilegeEscalation: false

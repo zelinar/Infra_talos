@@ -1,28 +1,41 @@
-# Vault / ExternalSecrets integration (synced from Vault KV v2 'homelab' space via vault-homelab ClusterSecretStore)
+# ==============================================================================
+# Vault / External Secrets Integration ('internal' KV v2 Engine)
+# ==============================================================================
+
 credentialsSecret:
   enabled: true
-  secretStoreName: vault-homelab
-  secretStoreKind: ClusterSecretStore
+  secretStoreName: "vault-homelab"
+  secretStoreKind: "ClusterSecretStore"
   remoteKey: "observability/grafana"
   secretName: "grafana-admin-secret"
   refreshInterval: "10m"
 
+# ==============================================================================
+# Grafana Server, Ingress, Storage & Datasources
+# ==============================================================================
+
 grafana:
   enabled: true
-  plugins:
-    - victoriametrics-metrics-datasource
-    - victoriametrics-logs-datasource
+  replicas: 1
 
   image:
     tag: "12.3.2"
 
-  replicas: 1
+  plugins:
+    - victoriametrics-metrics-datasource
+    - victoriametrics-logs-datasource
+
   admin:
     existingSecret: "grafana-admin-secret"
-    userKey: admin-user
-    passwordKey: admin-password
+    userKey: "admin-user"
+    passwordKey: "admin-password"
+
   deploymentStrategy:
     type: RollingUpdate
+
+  podAnnotations: {}
+  deploymentAnnotations:
+    reloader.stakater.com/auto: "true"
 
   service:
     type: ClusterIP
@@ -30,7 +43,7 @@ grafana:
 
   ingress:
     enabled: true
-    ingressClassName: traefik
+    ingressClassName: "traefik"
     path: /
     pathType: Prefix
     hosts:
@@ -51,8 +64,8 @@ grafana:
   persistence:
     enabled: true
     type: pvc
-    storageClassName: longhorn
-    size: 10Gi
+    storageClassName: "longhorn"
+    size: "10Gi"
     accessModes:
       - ReadWriteOnce
 

@@ -81,6 +81,21 @@ locals {
   )
 }
 
+# Persist the salted bcrypt hash in state so subsequent 'terraform plan' runs do not see drift
+resource "terraform_data" "argocd_admin_password_hash" {
+  count = var.enable_argocd && var.argocd_admin_password != "" ? 1 : 0
+
+  triggers_replace = [
+    sha256(var.argocd_admin_password),
+  ]
+
+  input = bcrypt(var.argocd_admin_password)
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
 # 1. Install ArgoCD and its CRDs (Application, ApplicationSet, AppProject)
 resource "helm_release" "argocd" {
   count = var.enable_argocd ? 1 : 0
@@ -116,7 +131,7 @@ resource "helm_release" "argocd" {
           "server.insecure" = true
         }
         secret = var.argocd_admin_password != "" ? {
-          argocdServerAdminPassword = bcrypt(var.argocd_admin_password)
+          argocdServerAdminPassword = terraform_data.argocd_admin_password_hash[0].output
         } : {}
       }
 

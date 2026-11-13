@@ -52,7 +52,8 @@ acme_cloudflare_api_token = "" # Required only when tls_mode = "letsencrypt"
 gitops_repo_url      = "https://github.com/zelinar/Infra_talos.git"
 gitops_repo_revision = "main"
 
-# Initial credentials seeded into Vault KV v2 and synced via External Secrets Operator
+# Initial credentials (ArgoCD & Vault KV v2 synced via External Secrets Operator)
+argocd_admin_password  = "admin"
 grafana_admin_user     = "admin"
 grafana_admin_password = "admin"
 alloy_active_token     = "homelab-alloy-collect-token-active"
